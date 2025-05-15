@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <title>Chat App</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/ai-tools.css">
+  <link rel="apple-touch-icon" href="/pngegg.png">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#128C7E">
+  <!-- Critical iOS and Safari Fixes -->
+  <style>
+    /* Critical fixes for iOS Safari - these need to be inline for immediate application */
+    @supports (-webkit-touch-callout: none) {
+      /* Apply only to iOS devices */
+      body {
+        position: fixed;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      
+      #login-screen {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+      }
+      
+      #chat-area, #sidebar {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative;
+      }
+      
+      /* Fix for button clicks on iOS */
+      button, .login-tab, .user-item {
+        cursor: pointer !important;
+        -webkit-appearance: none;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -webkit-tap-highlight-color: rgba(0,0,0,0);
+      }
+      
+      /* Login form won't be hidden properly on Safari without these */
+      #login-screen[style*="display: none"] {
+        display: none !important;
+        visibility: hidden !important;
+        z-index: -1 !important;
+      }
+      
+      #login-screen[style*="display: none"] ~ #chat-area,
+      #login-screen[style*="display: none"] ~ #sidebar {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+    }
+  </style>
+  <script>
+    // Debug script for Safari button clicks
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Debug script loaded for Safari compatibility');
+      
+      // Log all button clicks
+      document.addEventListener('click', function(e) {
+        if (e.target.tagName === 'BUTTON') {
+          console.log('Button clicked:', e.target.id || e.target.textContent);
+        }
+      }, true);
+      
+      // Log all touch events on buttons
+      document.addEventListener('touchend', function(e) {
+        if (e.target.tagName === 'BUTTON') {
+          console.log('Button touchend:', e.target.id || e.target.textContent);
+        }
+      }, true);
+      
+      // Direct fallback function for Safari - uses actual form submission
+      window.submitDirectForm = function(formType) {
+        console.log("Using direct form submission for: " + formType);
+        const form = document.getElementById('direct-' + formType + '-form');
+        if (form) {
+          if (formType === 'login') {
+            form.username.value = document.getElementById('username-input').value;
+            form.password.value = document.getElementById('password-input').value;
+          } else {
+            form.username.value = document.getElementById('signup-username-input').value;
+            form.password.value = document.getElementById('signup-password-input').value;
+          }
+          console.log("Submitting direct form");
+          form.submit();
+          return true;
+        }
+        return false;
+      }
+    });
+  </script>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-screen">
+    <div id="login-box">
+      <h2>Welcome</h2>
+      <div class="login-tabs">
+        <div class="login-tab active" data-tab="login" onclick="showLoginTab()">Login</div>
+        <div class="login-tab" data-tab="signup" onclick="showSignupTab()">Sign Up</div>
+      </div>
+      <div class="login-form" id="login-form">
+        <input id="username-input" type="text" placeholder="Username" autocomplete="username" />
+        <input id="password-input" type="password" placeholder="Password" autocomplete="current-password" />
+        <button id="login-button" type="button" role="button" tabindex="0" 
+          onclick="handleLogin(); return false;">Login</button>
+        <div class="login-footer">
+          <label for="remember-me">
+            <input type="checkbox" id="remember-me" checked>
+            Remember me
+          </label>
+        </div>
+      </div>
+      <div class="login-form" id="signup-form" style="display: none;">
+        <input id="signup-username-input" type="text" placeholder="Choose username" autocomplete="username" />
+        <input id="signup-password-input" type="password" placeholder="Choose password" autocomplete="new-password" />
+        <input id="signup-confirm-password" type="password" placeholder="Confirm password" autocomplete="new-password" />
+        <button id="signup-button" type="button" role="button" tabindex="0" 
+          onclick="handleSignup(); return false;">Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Interface -->
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h2>Chats</h2>
+      <div class="header-actions">
+        <button id="create-group-btn" title="Create Group">👥</button>
+        <button id="add-database-btn" title="Add Contact">+</button>
+      </div>
+    </div>
+    <ul id="users-list"></ul>
+  </div>
+  <div id="chat-area">
+    <div id="chat-header">
+      <button class="back-button">←</button>
+      <span id="current-chat-name">Select a chat</span>
+      <div class="chat-header-actions">
+        <button class="chat-header-action" id="chat-menu-btn" title="Options">⋮</button>
+      </div>
+    </div>
+    <ul id="messages"></ul>
+
+    <!-- Message Form -->
+    <form id="form" action="">
+      <button type="button" id="attachButton" title="Attach file"></button>
+      <input id="input" autocomplete="off" placeholder="Type a message..."/>
+      <button type="button" id="recordButton" title="Record voice"></button>
+      <button type="submit" id="send"></button>
+    </form>
+    
+    <!-- Hidden file input -->
+    <input type="file" id="fileInput" style="display: none;" />
+  </div>
+
+  <!-- Modal for External Database Linking -->
+  <div id="link-database-modal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="close-modal">&times;</span>
+      <h3>Add Contact</h3>
+      <p>Your code: <strong id="your-authenticator"></strong></p>
+      <p>Enter your contact's code to connect:</p>
+      <input id="external-authenticator-input" type="text" placeholder="Enter code" />
+      <button id="link-database-submit">Connect</button>
+    </div>
+  </div>
+
+  <!-- Audio recording preview -->
+  <div id="audioPreviewContainer" style="display: none;"></div>
+
+  <!-- Other modals -->
+  <div id="image-preview-modal" class="modal">
+    <div class="modal-content image-preview-content">
+      <span class="close" id="close-image-preview">&times;</span>
+      <img id="preview-image" src="" alt="Preview" />
+    </div>
+  </div>
+
+  <!-- Notification sound -->
+  <audio id="beep-sound" src="ring-tone.mp3" preload="auto"></audio>
+
+  <!-- Add Group Creation Modal -->
+  <div id="create-group-modal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="close-group-modal">&times;</span>
+      <h3>Create Group</h3>
+      <div class="input-group">
+        <label for="group-name">Group Name:</label>
+        <input id="group-name-input" type="text" placeholder="Enter group name" />
+      </div>
+      <div class="group-members">
+        <h4>Select Members:</h4>
+        <div id="members-list" class="select-members"></div>
+      </div>
+      <button id="create-group-submit">Create Group</button>
+    </div>
+  </div>
+
+  <!-- Add the AI Tools Button -->
+  <div class="ai-tools-button" id="ai-tools-button">
+    <span>🤖</span>
+  </div>
+
+  <!-- AI Tools Modal -->
+  <div class="ai-tools-modal" id="ai-tools-modal">
+    <div class="ai-tools-container">
+      <div class="ai-tools-header">
+        <h2>AI Tools</h2>
+        <button class="ai-tools-close" id="ai-tools-close">&times;</button>
+      </div>
+      
+      <!-- AI Tools Tabs -->
+      <div class="ai-tools-tabs">
+        <div class="ai-tool-tab active" data-tab="ai-assistant">AI Assistant</div>
+        <div class="ai-tool-tab" data-tab="argument-checker">Argument Checker</div>
+        <div class="ai-tool-tab" data-tab="text-correction">Text Correction</div>
+        <div class="ai-tool-tab" data-tab="image-generator">Image Generator</div>
+      </div>
+      
+      <!-- AI Tools Content -->
+      <div class="ai-tools-content">
+        <!-- AI Assistant tab content -->
+        <div id="ai-assistant-tab" class="ai-tool-content active">
+          <div class="ai-chat-container">
+            <div class="ai-chat-messages" id="ai-chat-messages"></div>
+            <div class="ai-chat-input-container">
+              <input type="text" id="ai-chat-input" class="ai-chat-input" placeholder="Ask the AI assistant...">
+              <button id="ai-chat-send" class="ai-chat-send">Send</button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Argument Checker tab content -->
+        <div id="argument-checker-tab" class="ai-tool-content">
+          <div class="argument-checker-container">
+            <textarea id="argument-input" class="argument-input" placeholder="Enter your argument to check its logic, evidence, and persuasiveness..."></textarea>
+            <div class="argument-buttons">
+              <button id="argument-check-btn" class="argument-check-btn">Check Argument</button>
+              <button id="argument-sources-btn" class="argument-sources-btn">Find Sources</button>
+            </div>
+            <div id="argument-result" class="argument-result"></div>
+            <div id="argument-sources" class="argument-sources"></div>
+          </div>
+        </div>
+        
+        <!-- Text Correction tab content -->
+        <div id="text-correction-tab" class="ai-tool-content">
+          <div class="correction-container">
+            <textarea id="correction-input" class="correction-input" placeholder="Enter text to correct spelling, grammar, and punctuation..."></textarea>
+            <button id="correction-btn" class="correction-btn">Correct Text</button>
+            <div id="correction-result" class="correction-result"></div>
+          </div>
+        </div>
+
+        <!-- Image Generator tab content -->
+        <div id="image-generator-tab" class="ai-tool-content">
+          <div class="image-generator-container">
+            <textarea id="image-prompt" class="image-prompt-input" placeholder="Describe the image you want to generate..."></textarea>
+            <div class="image-generator-options">
+              <select id="image-style" class="image-style-select">
+                <option value="realistic">Realistic</option>
+                <option value="artistic">Artistic</option>
+                <option value="cartoon">Cartoon</option>
+                <option value="3d">3D Render</option>
+              </select>
+              <button id="generate-image-btn" class="generate-image-btn">Generate Image</button>
+            </div>
+            <div id="image-result" class="image-result">
+              <div id="image-loading" class="image-loading" style="display: none;">
+                <div class="ai-loading-spinner"></div>
+                <div>Generating image...</div>
+              </div>
+              <div id="image-container"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden forms for Safari compatibility -->
+  <form id="direct-login-form" action="/login" method="POST" style="display:none;">
+    <input type="hidden" name="username">
+    <input type="hidden" name="password">
+  </form>
+  <form id="direct-signup-form" action="/signup" method="POST" style="display:none;">
+    <input type="hidden" name="username">
+    <input type="hidden" name="password">
+  </form>
+
+  <script>
+  // Direct tab switching for Safari
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add direct onclick handlers for tabs
+    const loginTab = document.querySelector('.login-tab[data-tab="login"]');
+    const signupTab = document.querySelector('.login-tab[data-tab="signup"]');
+    
+    if (loginTab) {
+      loginTab.setAttribute('onclick', 'showLoginTab()');
+    }
+    
+    if (signupTab) {
+      signupTab.setAttribute('onclick', 'showSignupTab()');
+    }
+    
+    // Define global tab switcher functions
+    window.showLoginTab = function() {
+      console.log('Switching to login tab');
+      loginTab.classList.add('active');
+      signupTab.classList.remove('active');
+      document.getElementById('login-form').style.display = 'block';
+      document.getElementById('signup-form').style.display = 'none';
+    };
+    
+    window.showSignupTab = function() {
+      console.log('Switching to signup tab');
+      signupTab.classList.add('active');
+      loginTab.classList.remove('active');
+      document.getElementById('signup-form').style.display = 'block';
+      document.getElementById('login-form').style.display = 'none';
+    };
+  });
+  </script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+  <script src="ai-tools.js"></script>
+</body>
+</html>

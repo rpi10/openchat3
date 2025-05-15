@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Groq Chatbot, Debate Argument Checker & Auto-Correct Tool</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    #chatbox {
+      width: 60%;
+      max-width: 600px;
+      height: 400px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 10px auto;
+    }
+    #userInput { width: 70%; padding: 10px; }
+    #sendBtn { padding: 10px; }
+    /* Left Sidebar: Auto-Correct Tool */
+    #correctionToolContainer {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      width: 300px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    #correctionToolContainer h3 { margin-top: 0; }
+    #correctionInput { width: 100%; height: 80px; }
+    #correctBtn { margin-top: 10px; padding: 8px; }
+    #correctionResult { margin-top: 10px; }
+    /* Right Sidebar: Debate Argument Checker */
+    #argumentCheckerContainer {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    #argumentCheckerContainer h3 { margin-top: 0; }
+    #argumentInput { width: 100%; height: 100px; }
+    #checkArgumentBtn, #searchSourcesBtn { margin-top: 10px; padding: 8px; }
+    #argumentResult, #sourceResults { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align: center;">Groq Chatbot</h2>
+  <div id="chatbox"></div>
+  <div style="text-align: center;">
+    <input type="text" id="userInput" placeholder="Type a message..." />
+    <button id="sendBtn">Send</button>
+  </div>
+
+  <!-- Left Sidebar: Auto-Correct Tool -->
+  <div id="correctionToolContainer">
+    <h3>Auto-Correct Tool</h3>
+    <textarea id="correctionInput" placeholder="Enter text to correct..."></textarea>
+    <button id="correctBtn">Correct</button>
+    <div id="correctionResult"></div>
+  </div>
+
+  <!-- Right Sidebar: Debate Argument Checker -->
+  <div id="argumentCheckerContainer">
+    <h3>Debate Argument Checker</h3>
+    <textarea id="argumentInput" placeholder="Enter your argument..."></textarea>
+    <button id="checkArgumentBtn">Check Argument</button>
+    <button id="searchSourcesBtn">Find Sources</button>
+    <div id="argumentResult"></div>
+    <div id="sourceResults"></div>
+  </div>
+
+  <script>
+    // Chat code
+    const chatbox = document.getElementById("chatbox");
+    const userInput = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+
+    function appendMessage(text, sender) {
+      const msgDiv = document.createElement("div");
+      msgDiv.textContent = `${sender}: ${text}`;
+      chatbox.appendChild(msgDiv);
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const message = userInput.value.trim();
+      if (!message) return;
+      appendMessage(message, "You");
+      userInput.value = "";
+      try {
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message })
+        });
+        const data = await response.json();
+        appendMessage(data.reply, "Bot");
+      } catch (err) {
+        appendMessage("Error: " + err.message, "Bot");
+      }
+    }
+
+    sendBtn.addEventListener("click", sendMessage);
+    userInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    // Auto-Correct Tool code
+    const correctBtn = document.getElementById("correctBtn");
+    const correctionInput = document.getElementById("correctionInput");
+    const correctionResult = document.getElementById("correctionResult");
+
+    correctBtn.addEventListener("click", async () => {
+      const text = correctionInput.value.trim();
+      if (!text) return;
+      correctionResult.textContent = "Correcting...";
+      try {
+        const response = await fetch("/correct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        correctionResult.textContent = data.corrected;
+      } catch (err) {
+        correctionResult.textContent = "Error: " + err.message;
+      }
+    });
+
+    // Debate Argument Checker code
+    const checkArgumentBtn = document.getElementById("checkArgumentBtn");
+    const searchSourcesBtn = document.getElementById("searchSourcesBtn");
+    const argumentInput = document.getElementById("argumentInput");
+    const argumentResult = document.getElementById("argumentResult");
+    const sourceResults = document.getElementById("sourceResults");
+
+    checkArgumentBtn.addEventListener("click", async () => {
+      const argumentText = argumentInput.value.trim();
+      if (!argumentText) return;
+      argumentResult.textContent = "Checking argument...";
+      try {
+        const response = await fetch("/checkargument", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ argument: argumentText })
+        });
+        const data = await response.json();
+        let color = "#FFFF00";
+        if (data.rating === 1) color = "#FF0000";
+        else if (data.rating === 2) color = "#FF6666";
+        else if (data.rating === 4) color = "#CCFFCC";
+        else if (data.rating === 5) color = "#008000";
+        argumentResult.innerHTML = `<div style="background-color: ${color}; padding: 5px;">
+          <strong>Rating: ${data.rating}</strong><br/>${data.explanation}
+        </div>`;
+      } catch (err) {
+        argumentResult.textContent = "Error: " + err.message;
+      }
+    });
+
+    searchSourcesBtn.addEventListener("click", async () => {
+      const query = argumentInput.value.trim();
+      if (!query) return;
+      sourceResults.textContent = "Searching sources...";
+      try {
+        const response = await fetch("/searchsources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query })
+        });
+        const data = await response.json();
+        sourceResults.innerHTML = data.sources.length
+          ? data.sources.map(src => `<a href="${src.url}" target="_blank">${src.title}</a><br/>`).join("")
+          : "No sources found.";
+      } catch (err) {
+        sourceResults.textContent = "Error fetching sources: " + err.message;
+      }
+    });
+  </script>
+</body>
+</html>

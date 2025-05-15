@@ -1,0 +1,3129 @@
+const socket = io();
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const messages = document.getElementById('messages');
+const usersList = document.getElementById('users-list');
+const loginScreen = document.getElementById('login-screen');
+const loginButton = document.getElementById('login-button');
+const usernameInput = document.getElementById('username-input');
+const passwordInput = document.getElementById('password-input');
+const recordButton = document.getElementById('recordButton');
+let mediaRecorder;
+let audioChunks = [];
+let currentUser = null;
+let currentConversation = null;
+let unseenMessages = {};
+let currentUserAuthenticator = null; // Global for storing the user's authentificator
+
+// Global variable for grouping day headers
+let lastDisplayedDay = null;
+const audioPreviewContainer = document.createElement('div');
+audioPreviewContainer.id = 'audioPreviewContainer';
+audioPreviewContainer.style.position = 'fixed';
+audioPreviewContainer.style.bottom = '80px';
+audioPreviewContainer.style.left = '50%';
+audioPreviewContainer.style.transform = 'translateX(-50%)';
+audioPreviewContainer.style.backgroundColor = '#fff';
+audioPreviewContainer.style.padding = '10px';
+audioPreviewContainer.style.border = '1px solid #ccc';
+audioPreviewContainer.style.borderRadius = '8px';
+audioPreviewContainer.style.display = 'none';
+document.body.appendChild(audioPreviewContainer);
+
+// Create an alias for messages element
+let messagesList;
+document.addEventListener("DOMContentLoaded", function() {
+  messagesList = document.getElementById('messages');
+});
+
+/** Debug Fetch Wrapper **/
+function debugFetch(url, options) {
+  console.log(`Fetching ${url} with options:`, options);
+  return fetch(url, options).then(async response => {
+    const clone = response.clone();
+    try {
+      const data = await clone.json();
+      console.log('Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data
+      });
+    } catch (e) {
+      console.log('Response (not JSON):', {
+        status: response.status,
+        statusText: response.statusText
+      });
+    }
+    return response;
+  });
+}
+
+/** Service Worker Registration **/
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(registration => {
+      console.log('Service Worker registered with scope:', registration.scope);
+    })
+    .catch(error => {
+      console.error('Service Worker registration failed:', error);
+    });
+}
+
+/** Request Notification Permission **/
+function requestNotificationPermission() {
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        console.log('Notification permission granted.');
+      } else {
+        console.error('Notification permission denied.');
+      }
+    });
+  }
+}
+requestNotificationPermission();
+
+/** Auto-login if Credentials Are Stored & Initialize Mobile Nav **/
+document.addEventListener('DOMContentLoaded', () => {
+  const savedUsername = localStorage.getItem('username');
+  const savedPassword = localStorage.getItem('password');
+  if (savedUsername && savedPassword) {
+    socket.emit('login', { username: savedUsername, password: savedPassword });
+  }
+  initializeMobileNav(); // Initialize mobile navigation when page loads
+});
+
+/** Play Beep Sound for New Messages **/
+function playBeep() {
+  const beepSound = document.getElementById('beep-sound');
+  if (beepSound) {
+    beepSound.play();
+  }
+}
+
+/** Show Notification for Incoming Messages **/
+function showNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    navigator.serviceWorker.ready.then(function(registration) {
+      registration.showNotification(title, {
+        body: body,
+        icon: '/path/to/icon.png' // Optional: add an icon
+      });
+    }).catch(error => {
+      console.error('Error showing notification:', error);
+    });
+  }
+}
+
+/** Display a text message **/
+function displayMessage({ from, msg, timestamp, dayLabel }) {
+  // Add day header if needed
+  if (lastDisplayedDay !== dayLabel) {
+    const header = document.createElement('li');
+    header.className = 'day-header';
+    header.textContent = dayLabel;
+    header.style.listStyleType = 'none';
+    messages.appendChild(header);
+    lastDisplayedDay = dayLabel;
+  }
+  
+  const bubble = document.createElement('li');
+  bubble.className = from === currentUser ? 'message-from-me' : 'message-from-others';
+  bubble.style.listStyleType = 'none';
+  
+  // Create the message bubble
+  const messageBubble = document.createElement('div');
+  messageBubble.className = 'message-bubble';
+  
+  // Add message text
+  const messageText = document.createElement('div');
+  messageText.className = 'message-text';
+  messageText.textContent = msg;
+  messageBubble.appendChild(messageText);
+  
+  // Add timestamp
+  const timeElement = document.createElement('div');
+  timeElement.className = 'message-time';
+  timeElement.textContent = timestamp;
+  messageBubble.appendChild(timeElement);
+  
+  bubble.appendChild(messageBubble);
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+// Fix file message display
+function displayFileMessage({ from, fileUrl, fileName, fileType, fileSize, timestamp, dayLabel, recorded }) {
+  // Ensure proper parameter values with fallbacks
+  from = from || 'Unknown';
+  fileUrl = fileUrl || '';
+  fileName = fileName || 'File';
+  fileType = fileType || '';
+  fileSize = fileSize || 0;
+  timestamp = timestamp || formatTime(new Date());
+  dayLabel = dayLabel || formatDayLabel(new Date());
+  
+  // Debug logs for troubleshooting
+  console.log('Displaying file message:', {
+    from, fileUrl, fileName, fileType, fileSize, timestamp, dayLabel, recorded
+  });
+  
+  // Add day header if needed
+  if (lastDisplayedDay !== dayLabel) {
+    const header = document.createElement('li');
+    header.className = 'day-header';
+    header.textContent = dayLabel;
+    header.style.listStyleType = 'none';
+    messages.appendChild(header);
+    lastDisplayedDay = dayLabel;
+  }
+  
+  const bubble = document.createElement('li');
+  bubble.className = from === currentUser ? 'message-from-me' : 'message-from-others';
+  bubble.style.listStyleType = 'none';
+  
+  // Convert file size for display
+  const formattedSize = formatFileSize(fileSize || 0);
+  
+  // Container for the entire message content
+  const messageBubble = document.createElement('div');
+  messageBubble.className = 'message-bubble';
+  
+  // Store the file type in a data attribute for persistence
+  messageBubble.dataset.fileType = fileType || '';
+  messageBubble.dataset.fileUrl = fileUrl || '';
+  messageBubble.dataset.fileName = fileName || '';
+  messageBubble.dataset.fileSize = fileSize || '0';
+  messageBubble.dataset.recorded = recorded ? 'true' : 'false';
+  
+  // Check if it's an audio file (explicit check or recorded status)
+  const isAudio = (fileType && fileType.startsWith('audio/')) || 
+                 (recorded === true) || 
+                 (fileName && fileName.includes('audio_'));
+  
+  // Special handling for audio files
+  if (isAudio) {
+    // Create WhatsApp-like audio player container
+    const audioContainer = document.createElement('div');
+    audioContainer.className = 'audio-message-container';
+    audioContainer.style.position = 'relative';
+    audioContainer.style.paddingRight = '36px'; // Add space for the transcript button
+    audioContainer.style.width = '100%';
+    audioContainer.style.boxSizing = 'border-box';
+    audioContainer.style.overflowX = 'hidden';
+    
+    // Add play button
+    const playButton = document.createElement('button');
+    playButton.className = 'audio-play-button';
+    playButton.innerHTML = '<i class="play-icon">▶</i>';
+    playButton.style.flexShrink = '0';
+    
+    // Add waveform visualization with consistent width
+    const waveform = document.createElement('div');
+    waveform.className = 'audio-waveform';
+    waveform.style.width = 'calc(100% - 30px)'; // Account for play button
+    waveform.style.overflowX = 'hidden';
+    waveform.style.flexShrink = '1';
+    
+    // Generate simple waveform visualization
+    for (let i = 0; i < 27; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'waveform-bar';
+      // Create random heights for aesthetic effect
+      bar.style.height = `${Math.floor(Math.random() * 13) + 5}px`;
+      waveform.appendChild(bar);
+    }
+    
+    // Add duration/info element
+    const audioInfo = document.createElement('div');
+    audioInfo.className = 'audio-info';
+    audioInfo.textContent = formattedSize;
+    audioInfo.style.overflow = 'hidden';
+    audioInfo.style.textOverflow = 'ellipsis';
+    audioInfo.style.whiteSpace = 'nowrap';
+    audioInfo.style.fontSize = '12px';
+    audioInfo.style.color = '#666';
+    audioInfo.style.marginRight = '4px';
+    
+    // Actual audio element (hidden)
+    const audio = document.createElement('audio');
+    audio.src = fileUrl;
+    audio.preload = 'metadata';
+    
+    // Add transcript button
+    const transcriptBtn = document.createElement('button');
+    transcriptBtn.className = 'transcript-button';
+    transcriptBtn.innerHTML = '📝';
+    transcriptBtn.title = 'Get transcript';
+    transcriptBtn.style.minWidth = '24px';
+    transcriptBtn.style.width = '24px';
+    transcriptBtn.style.height = '24px';
+    transcriptBtn.style.padding = '0';
+    transcriptBtn.style.display = 'flex';
+    transcriptBtn.style.justifyContent = 'center';
+    transcriptBtn.style.alignItems = 'center';
+    transcriptBtn.style.fontSize = '12px';
+    transcriptBtn.style.position = 'absolute';
+    transcriptBtn.style.right = '8px';
+    transcriptBtn.style.top = '50%';
+    transcriptBtn.style.transform = 'translateY(-50%)';
+    transcriptBtn.style.border = 'none';
+    transcriptBtn.style.borderRadius = '50%';
+    transcriptBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+    
+    // Event listener for play button
+    playButton.addEventListener('click', function() {
+      if (audio.paused) {
+        audio.play();
+        playButton.innerHTML = '<i class="play-icon">⏸</i>';
+      } else {
+        audio.pause();
+        playButton.innerHTML = '<i class="play-icon">▶</i>';
+      }
+    });
+    
+    // Add touchstart event for better mobile/iPad compatibility
+    playButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      if (audio.paused) {
+        audio.play();
+        playButton.innerHTML = '<i class="play-icon">⏸</i>';
+      } else {
+        audio.pause();
+        playButton.innerHTML = '<i class="play-icon">▶</i>';
+      }
+    });
+    
+    // Event listener for audio completion
+    audio.addEventListener('ended', function() {
+      playButton.innerHTML = '<i class="play-icon">▶</i>';
+    });
+    
+    // Event listener for transcript button
+    transcriptBtn.addEventListener('click', function() {
+      transcribeAudio(fileUrl, messageBubble);
+    });
+    
+    // Add touchstart for better iPad compatibility
+    transcriptBtn.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      transcribeAudio(fileUrl, messageBubble);
+    });
+    
+    // Fix the audio metadata loading and duration display
+    audio.addEventListener('loadedmetadata', function() {
+      try {
+        // Check for valid duration to prevent NaN display
+        if (isFinite(audio.duration) && !isNaN(audio.duration)) {
+          const minutes = Math.floor(audio.duration / 60);
+          const seconds = Math.floor(audio.duration % 60);
+          audioInfo.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} · ${formattedSize}`;
+        } else {
+          // Fallback if duration is invalid
+          audioInfo.textContent = formattedSize;
+          
+          // Try again in 1 second (sometimes metadata needs more time)
+          setTimeout(() => {
+            if (isFinite(audio.duration) && !isNaN(audio.duration)) {
+              const minutes = Math.floor(audio.duration / 60);
+              const seconds = Math.floor(audio.duration % 60);
+              audioInfo.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} · ${formattedSize}`;
+            }
+          }, 1000);
+        }
+      } catch (e) {
+        console.error("Error calculating audio duration:", e);
+        audioInfo.textContent = formattedSize;
+      }
+    });
+    
+    // Assemble audio player
+    audioContainer.appendChild(playButton);
+    audioContainer.appendChild(waveform);
+    audioContainer.appendChild(audioInfo);
+    audioContainer.appendChild(transcriptBtn);
+    audioContainer.appendChild(audio);
+    
+    messageBubble.appendChild(audioContainer);
+  }
+  // Special handling for images
+  else if (fileType && fileType.startsWith('image/')) {
+    const imgContainer = document.createElement('div');
+    imgContainer.className = 'image-message-container';
+    
+    const img = document.createElement('img');
+    img.src = fileUrl;
+    img.alt = fileName || 'Image';
+    img.className = 'message-image';
+    img.loading = 'lazy';
+    
+    // Add click event to show image in modal
+    img.addEventListener('click', function() {
+      showImageModal(img);
+    });
+    
+    // Add touchstart for better iPad compatibility
+    img.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      showImageModal(img);
+    });
+    
+    imgContainer.appendChild(img);
+    messageBubble.appendChild(imgContainer);
+  }
+  // Special handling for videos
+  else if (fileType && fileType.startsWith('video/')) {
+    const videoContainer = document.createElement('div');
+    videoContainer.className = 'video-message-container';
+    
+    const video = document.createElement('video');
+    video.src = fileUrl;
+    video.className = 'message-video';
+    video.controls = true;
+    video.preload = 'metadata';
+    
+    videoContainer.appendChild(video);
+    messageBubble.appendChild(videoContainer);
+  }
+  // Default handling for other file types
+  else {
+    const fileElement = document.createElement('div');
+    fileElement.className = 'file-attachment';
+    
+    // Store file type and recorded status for persistence
+    fileElement.dataset.fileType = fileType || '';
+    fileElement.dataset.isAudio = fileType && fileType.startsWith('audio/') ? 'true' : 'false';
+    fileElement.dataset.recorded = recorded ? 'true' : 'false';
+    
+    const fileIcon = document.createElement('div');
+    fileIcon.className = 'file-icon';
+    fileIcon.textContent = '📄';
+    
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'file-info';
+    
+    const fileNameElement = document.createElement('div');
+    fileNameElement.className = 'file-name';
+    fileNameElement.textContent = fileName || 'File';
+    
+    const fileSizeElement = document.createElement('div');
+    fileSizeElement.className = 'file-size';
+    fileSizeElement.textContent = formattedSize;
+    
+    fileInfo.appendChild(fileNameElement);
+    fileInfo.appendChild(fileSizeElement);
+    
+    const downloadLink = document.createElement('a');
+    downloadLink.href = fileUrl;
+    downloadLink.download = fileName || 'download';
+    downloadLink.className = 'download-link';
+    downloadLink.textContent = 'Download';
+    downloadLink.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    fileElement.appendChild(fileIcon);
+    fileElement.appendChild(fileInfo);
+    fileElement.appendChild(downloadLink);
+    
+    fileElement.addEventListener('click', () => {
+      downloadFile(fileUrl, fileName);
+    });
+    
+    messageBubble.appendChild(fileElement);
+  }
+  
+  // Add timestamp
+  const timeElement = document.createElement('div');
+  timeElement.className = 'message-time';
+  timeElement.textContent = timestamp;
+  messageBubble.appendChild(timeElement);
+  
+  bubble.appendChild(messageBubble);
+  messages.appendChild(bubble);
+  messages.scrollTop = messages.scrollHeight;
+  
+  return bubble;
+}
+
+/** Handle Login/Signup events **/
+document.addEventListener('DOMContentLoaded', () => {
+  // Add touchstart event listeners to buttons for iPad
+  document.querySelectorAll('button').forEach(button => {
+    button.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      this.click();
+    });
+  });
+
+  // Fix for login/signup tabs on iPad
+  const loginTab = document.querySelector('.login-tab[data-tab="login"]');
+  const signupTab = document.querySelector('.login-tab[data-tab="signup"]');
+  const loginForm = document.getElementById('login-form');
+  const signupForm = document.getElementById('signup-form');
+  const loginButton = document.getElementById('login-button');
+  const signupButton = document.getElementById('signup-button');
+  const rememberMe = document.getElementById('remember-me');
+
+  // Tab switching with touchstart for iPad
+  if (loginTab) {
+    loginTab.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      this.classList.add('active');
+      signupTab.classList.remove('active');
+      loginForm.style.display = 'block';
+      signupForm.style.display = 'none';
+    });
+    
+    // Also keep regular click handler
+    loginTab.addEventListener('click', function() {
+      this.classList.add('active');
+      signupTab.classList.remove('active');
+      loginForm.style.display = 'block';
+      signupForm.style.display = 'none';
+    });
+  }
+
+  if (signupTab) {
+    signupTab.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      this.classList.add('active');
+      loginTab.classList.remove('active');
+      signupForm.style.display = 'block';
+      loginForm.style.display = 'none';
+    });
+    
+    // Also keep regular click handler
+    signupTab.addEventListener('click', function() {
+      this.classList.add('active');
+      loginTab.classList.remove('active');
+      signupForm.style.display = 'block';
+      loginForm.style.display = 'none';
+    });
+  }
+
+  // Login handling with improved touchstart handling for iPad
+  if (loginButton) {
+    loginButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      const username = document.getElementById('username-input').value.trim();
+      const password = document.getElementById('password-input').value.trim();
+      
+      if (username && password) {
+        if (rememberMe && rememberMe.checked) {
+          localStorage.setItem('username', username);
+          localStorage.setItem('password', password);
+        } else {
+          localStorage.removeItem('username');
+          localStorage.removeItem('password');
+        }
+        socket.emit('login', { username, password });
+      } else {
+        showError('Please enter both username and password.');
+      }
+    });
+    
+    // Also keep regular click handler
+    loginButton.addEventListener('click', function() {
+      const username = document.getElementById('username-input').value.trim();
+      const password = document.getElementById('password-input').value.trim();
+      
+      if (username && password) {
+        if (rememberMe && rememberMe.checked) {
+          localStorage.setItem('username', username);
+          localStorage.setItem('password', password);
+        } else {
+          localStorage.removeItem('username');
+          localStorage.removeItem('password');
+        }
+        socket.emit('login', { username, password });
+      } else {
+        showError('Please enter both username and password.');
+      }
+    });
+  }
+
+  // Signup handling with improved touchstart handling for iPad
+  if (signupButton) {
+    signupButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      const username = document.getElementById('signup-username-input').value.trim();
+      const password = document.getElementById('signup-password-input').value.trim();
+      const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
+
+      if (!username || !password || !confirmPassword) {
+        showError('Please fill in all fields.');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showError('Passwords do not match.');
+        return;
+      }
+
+      if (password.length < 6) {
+        showError('Password must be at least 6 characters long.');
+        return;
+      }
+
+      socket.emit('signup', { username, password });
+    });
+    
+    // Also keep regular click handler
+    signupButton.addEventListener('click', function() {
+      const username = document.getElementById('signup-username-input').value.trim();
+      const password = document.getElementById('signup-password-input').value.trim();
+      const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
+
+      if (!username || !password || !confirmPassword) {
+        showError('Please fill in all fields.');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showError('Passwords do not match.');
+        return;
+      }
+
+      if (password.length < 6) {
+        showError('Password must be at least 6 characters long.');
+        return;
+      }
+
+      socket.emit('signup', { username, password });
+    });
+  }
+});
+
+socket.on('login success', (data) => {
+  console.log('Login success event received:', data);
+  if (data && data.username && data.authentificator) {
+    currentUser = data.username;
+    currentUserAuthenticator = data.authentificator; // Save authentificator globally
+  }
+  loginScreen.style.display = 'none';
+  socket.emit('load users');
+  subscribeToPushNotifications();
+});
+
+socket.on('prompt signup', (message) => {
+  const confirmed = confirm(message);
+  if (confirmed) {
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value.trim();
+    if (username && password) {
+      socket.emit('signup', { username, password });
+    } else {
+      alert('Please enter both username and password.');
+    }
+  }
+});
+
+socket.on('signup successful', (username) => {
+  alert('Signup successful! You are now logged in.');
+  currentUser = username;
+  loginScreen.style.display = 'none';
+  socket.emit('load users');
+});
+
+socket.on('login failed', (message) => {
+  alert(message);
+});
+
+socket.on('signup failed', (message) => {
+  alert(message);
+});
+
+socket.on('password setup successful', () => {
+  alert('Password setup successful! You are now logged in.');
+  loginScreen.style.display = 'none';
+  socket.emit('load users');
+});
+
+socket.on('setup failed', (message) => {
+  alert(message);
+});
+
+/** LINK DATABASE HANDLING **/
+// Changed to use an HTTP POST request to '/link-database'
+document.addEventListener('DOMContentLoaded', () => {
+  const addDatabaseBtn = document.getElementById('add-database-btn');
+  const linkDatabaseModal = document.getElementById('link-database-modal');
+  const closeModalBtn = document.getElementById('close-modal');
+  const linkDatabaseSubmit = document.getElementById('link-database-submit');
+  const yourAuthenticatorSpan = document.getElementById('your-authenticator');
+  const externalAuthenticatorInput = document.getElementById('external-authenticator-input');
+
+  addDatabaseBtn.addEventListener('click', () => {
+    console.log('Plus button clicked. Current authentificator:', currentUserAuthenticator);
+    linkDatabaseModal.style.display = 'block';
+    yourAuthenticatorSpan.textContent = currentUserAuthenticator || 'Not set';
+  });
+
+  closeModalBtn.addEventListener('click', () => {
+    linkDatabaseModal.style.display = 'none';
+  });
+
+  window.addEventListener('click', (event) => {
+    if (event.target === linkDatabaseModal) {
+      linkDatabaseModal.style.display = 'none';
+    }
+  });
+
+  linkDatabaseSubmit.addEventListener('click', async () => {
+    const externalAuthenticator = externalAuthenticatorInput.value.trim();
+    if (!externalAuthenticator) {
+      alert('Please enter an authentificator.');
+      return;
+    }
+    try {
+      const response = await debugFetch('/link-database', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser, externalAuthenticator })
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Linking database failed');
+      }
+      const data = await response.json();
+      alert(data.message);
+    } catch (error) {
+      alert('Error linking database: ' + error.message);
+    }
+    externalAuthenticatorInput.value = '';
+    linkDatabaseModal.style.display = 'none';
+  });
+});
+
+/** Handle Receiving Chat Messages **/
+socket.on('chat message', (data) => {
+  displayMessage(data);
+  if (data.from !== currentUser) {
+    playBeep();
+    showNotification(data.from, data.msg);
+    unseenMessages[data.from] = (unseenMessages[data.from] || 0) + 1;
+    const userItem = Array.from(usersList.children).find(li => li.textContent.trim().startsWith(data.from));
+    if (userItem) {
+      let count = userItem.querySelector('.unseen-count');
+      if (!count) {
+        count = document.createElement('span');
+        count.className = 'unseen-count';
+        userItem.appendChild(count);
+      }
+      count.textContent = unseenMessages[data.from];
+    }
+  }
+});
+
+socket.on('file message', (data) => {
+  // Immediately display the file message without waiting for user click
+  displayFileMessage(data);
+  
+  // If it's a message from someone else, show notification
+  if (data.from !== currentUser) {
+    playBeep();
+    showNotification(data.from, 'Sent you a file');
+    
+    // Update unread counter
+    unseenMessages[data.from] = (unseenMessages[data.from] || 0) + 1;
+    updateUnseenCount(data.from);
+  }
+  
+  // Scroll to bottom to show the new message
+  setTimeout(() => {
+    messages.scrollTop = messages.scrollHeight;
+  }, 100);
+});
+  
+socket.on('chat history', (msgs) => {
+  console.log('Received chat history:', msgs);
+  lastDisplayedDay = null;
+  messages.innerHTML = '';
+  
+  if (!msgs || msgs.length === 0) {
+    // Add empty state message
+    const emptyState = document.createElement('li');
+    emptyState.className = 'empty-chat-message';
+    emptyState.innerHTML = '<div class="empty-chat-content">No messages yet. Start the conversation!</div>';
+    messages.appendChild(emptyState);
+    return;
+  }
+  
+  msgs.forEach(msg => {
+    try {
+      if (msg.isFileMessage || msg.fileUrl) {
+        // Enhanced debug logs
+        console.log('Processing file message:', msg);
+        
+        // Fix issue where audio files aren't detected properly after refresh
+        const isAudio = (msg.fileType && msg.fileType.startsWith('audio/')) || 
+                       (msg.type && msg.type.startsWith('audio/'));
+        const isRecordedAudio = msg.recorded === true || 
+                               (msg.fileName && msg.fileName.includes('audio_')) ||
+                               (msg.name && msg.name.includes('audio_'));
+        
+        // Create message with proper file type recognition
+        displayFileMessage({
+          from: msg.from,
+          fileUrl: msg.fileUrl,
+          fileName: msg.fileName || msg.name, // Support both property names
+          fileType: isRecordedAudio && !msg.fileType && !msg.type ? 'audio/mp3' : (msg.fileType || msg.type), // Support both property names
+          fileSize: msg.fileSize || msg.size, // Support both property names
+          timestamp: msg.timestamp,
+          dayLabel: msg.dayLabel,
+          recorded: msg.recorded || isRecordedAudio
+        });
+      } else {
+        console.log('Processing text message:', msg);
+        displayMessage(msg);
+      }
+    } catch (error) {
+      console.error('Error displaying message:', error, msg);
+    }
+  });
+  
+  // Scroll to bottom
+  setTimeout(() => {
+    messages.scrollTop = messages.scrollHeight;
+  }, 100);
+});
+
+socket.on('users', (usersArr) => {
+  console.log('Received users list:', usersArr);
+  usersList.innerHTML = '';
+  
+  const filteredUsers = usersArr.filter(user => {
+    if (user.type === 'group') return true;
+    return user.username !== currentUser;
+  });
+  
+  console.log(`Rendering ${filteredUsers.length} contacts/groups`);
+  
+  filteredUsers.sort((a, b) => {
+    if (a.type === 'group' && b.type !== 'group') return -1;
+    if (a.type !== 'group' && b.type === 'group') return 1;
+    if (a.type !== 'group' && b.type !== 'group') {
+      if (a.online && !b.online) return -1;
+      if (!a.online && b.online) return 1;
+    }
+    return a.username.localeCompare(b.username);
+  });
+  
+  filteredUsers.forEach(user => {
+    const item = document.createElement('li');
+    item.className = user.type === 'group' ? 'user-item group' : 'user-item contact';
+    item.dataset.username = user.username;
+
+    if (user.type === 'group') {
+      item.dataset.type = 'group';
+      item.dataset.id = user.id;
+      const firstLetter = user.username.charAt(0).toUpperCase();
+      item.innerHTML = `
+        <div class="avatar group-avatar">${firstLetter}</div>
+        <div class="user-info">
+          <div class="user-name">${user.username}</div>
+          <div class="last-message">${user.members ? user.members.length : 0} members</div>
+        </div>
+        <button class="group-manage-btn" data-group-id="${user.id}">⚙️</button>
+      `;
+      
+      // Add direct click handler for group selection
+      item.addEventListener('click', function(e) {
+        // Skip if clicked on the group manage button
+        if (e.target.closest('.group-manage-btn')) {
+          return;
+        }
+        console.log('Group item clicked:', this.dataset);
+        handleGroupSelection(this);
+      });
+      
+    } else {
+      item.dataset.type = 'contact';
+      item.innerHTML = `
+        <span class="online-status ${user.online ? 'online' : 'offline'}"></span>
+        <div class="avatar">${user.username.charAt(0).toUpperCase()}</div>
+        <div class="user-info">
+          <div class="user-name">${user.username}</div>
+          <div class="last-message"></div>
+        </div>
+      `;
+      
+      // Add direct click handler for contact selection
+      item.addEventListener('click', function() {
+        console.log('Contact item clicked:', this.dataset);
+        handleContactSelection(this);
+      });
+    }
+    usersList.appendChild(item);
+  });
+
+  console.log('User list updated with direct event handlers');
+});
+
+// KEEP ONE SIMPLE HANDLER for group management buttons
+document.addEventListener('click', function(e) {
+    const manageButton = e.target.closest('.group-manage-btn');
+    if (manageButton) {
+        e.stopPropagation(); // Prevent the userList click/touchend handler from also firing
+        const groupItem = manageButton.closest('.user-item.group');
+        if (groupItem && groupItem.dataset.id) {
+            console.log('Opening group management for:', groupItem.dataset);
+            openGroupManagementModal(groupItem);
+        } else {
+            console.error('Could not find group item or group ID for manage button:', manageButton);
+        }
+    }
+}, true); // Use capture phase to handle it before other click listeners if needed
+
+// Helper function to set up back button (called whenever a chat is selected)
+function setupBackButton() {
+  const backButton = document.querySelector('.back-button');
+  if (backButton) {
+    // Remove old handlers to avoid duplicates
+    const newBackButton = backButton.cloneNode(true);
+    backButton.parentNode.replaceChild(newBackButton, backButton);
+    
+    // Add click handler
+    newBackButton.addEventListener('click', function() {
+      console.log('Back button clicked');
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) {
+        sidebar.classList.add('active');
+        const chatArea = document.getElementById('chat-area');
+        if (chatArea) chatArea.style.zIndex = '50';
+        sidebar.style.zIndex = '100';
+      }
+    });
+    
+    // Add touchstart handler specifically for iOS
+    newBackButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      console.log('Back button touched');
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) {
+        sidebar.classList.add('active');
+        const chatArea = document.getElementById('chat-area');
+        if (chatArea) chatArea.style.zIndex = '50';
+        sidebar.style.zIndex = '100';
+      }
+    }, { passive: false });
+  }
+}
+
+// Modify the form submission to handle both direct and group messages
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  
+  if (!input.value || !currentConversation) return;
+  
+  const messageText = input.value.trim();
+  
+  // Check if we're in a group chat or direct message
+  const activeConversation = document.querySelector('#users-list li.active');
+  if (activeConversation && activeConversation.dataset.type === 'group') {
+    // Group message
+    console.log(`Sending group message to ${currentConversation}: ${messageText}`);
+    socket.emit('group message', { 
+      groupId: currentConversation, 
+      msg: messageText 
+    });
+  } else {
+    // Direct message
+    console.log(`Sending direct message to ${currentConversation}: ${messageText}`);
+    socket.emit('chat message', { 
+      to: currentConversation, 
+      msg: messageText 
+    });
+  }
+  
+  // Clear input after sending
+  input.value = '';
+});
+
+/** FILE UPLOAD FUNCTIONALITY **/
+const attachButton = document.getElementById('attachButton');
+const fileInput = document.getElementById('fileInput');
+
+attachButton.addEventListener('click', function() {
+  document.getElementById('fileInput').click();
+});
+
+fileInput.addEventListener('change', async function(e) {
+  if (!e.target.files.length) return;
+  
+  const file = e.target.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    // Show loading indicator
+    const loadingIndicator = document.createElement('div');
+    loadingIndicator.className = 'loading-indicator';
+    loadingIndicator.textContent = 'Uploading file...';
+    document.body.appendChild(loadingIndicator);
+    
+    // Upload file to server
+    const response = await fetch('/upload', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) throw new Error('Upload failed');
+    
+    const data = await response.json();
+    
+    // Remove loading indicator
+    document.body.removeChild(loadingIndicator);
+    
+    // Send file message
+    if (currentConversation) {
+      socket.emit('file message', {
+        to: currentConversation,
+        fileUrl: data.url,
+        name: file.name,
+        type: file.type,
+        size: file.size
+      });
+    }
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    alert('Failed to upload file. Please try again.');
+    const loadingIndicator = document.querySelector('.loading-indicator');
+    if (loadingIndicator) document.body.removeChild(loadingIndicator);
+  }
+});
+
+/** Push Notifications Subscription **/
+function subscribeToPushNotifications() {
+  navigator.serviceWorker.ready.then(function(registration) {
+    registration.pushManager.getSubscription().then(function(subscription) {
+      if (!subscription) {
+        registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlB64ToUint8Array('<YOUR_VAPID_PUBLIC_KEY>')
+        }).then(function(subscription) {
+          socket.emit('subscribe', subscription);
+        }).catch(function(error) {
+          console.error('Failed to subscribe to push notifications:', error);
+        });
+      }
+    });
+  });
+}
+  
+function urlB64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/** Helper Functions to Format Time and Day Label **/
+function formatTime(date) {
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function formatDayLabel(date) {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+/** Mobile Navigation Functions **/
+function initializeMobileNav() {
+  const sidebar = document.getElementById('sidebar');
+  const chatArea = document.getElementById('chat-area');
+  const backButton = document.querySelector('.back-button');
+  const usersList = document.getElementById('users-list');
+  
+  // Show sidebar by default on mobile
+  if (window.innerWidth <= 768) {
+    sidebar.classList.add('active');
+  }
+  
+  // Back button shows the sidebar
+  if (backButton) {
+    backButton.addEventListener('click', function(e) {
+      e.preventDefault();
+      sidebar.classList.add('active');
+      chatArea.style.zIndex = '50';
+    });
+  }
+  
+  // Clicking a user hides the sidebar on mobile
+  if (usersList) {
+    usersList.addEventListener('click', function(e) {
+      if (window.innerWidth <= 768) {
+        sidebar.classList.remove('active');
+        chatArea.style.zIndex = '100';
+      }
+    });
+  }
+  
+  // Handle touch gestures for sidebar
+  let touchStartX = 0;
+  let touchEndX = 0;
+  
+  document.addEventListener('touchstart', function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+  }, false);
+  
+  document.addEventListener('touchend', function(e) {
+    touchEndX = e.changedTouches[0].screenX;
+    handleSwipe();
+  }, false);
+  
+  function handleSwipe() {
+    const SWIPE_THRESHOLD = 100;
+    
+    // Right swipe
+    if (touchEndX - touchStartX > SWIPE_THRESHOLD) {
+      sidebar.classList.add('active');
+      chatArea.style.zIndex = '50';
+    }
+    
+    // Left swipe
+    if (touchStartX - touchEndX > SWIPE_THRESHOLD) {
+      sidebar.classList.remove('active');
+      chatArea.style.zIndex = '100';
+    }
+  }
+}
+
+function showChat() {
+  document.body.classList.add('chat-active');
+}
+
+function showUsersList() {
+  document.body.classList.remove('chat-active');
+}
+
+/** Modal Image Handling **/
+function createImageModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const modalActions = document.createElement('div');
+  modalActions.className = 'modal-actions';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'close-modal';
+  closeBtn.innerHTML = '×';
+  const downloadBtn = document.createElement('button');
+  downloadBtn.className = 'download-modal';
+  downloadBtn.textContent = 'Download';
+  modalActions.appendChild(closeBtn);
+  modalActions.appendChild(downloadBtn);
+  const modalImg = document.createElement('img');
+  modalImg.className = 'modal-content';
+  modal.appendChild(modalActions);
+  modal.appendChild(modalImg);
+  document.body.appendChild(modal);
+  return { modal, modalImg, closeBtn, downloadBtn };
+}
+
+const { modal, modalImg, closeBtn, downloadBtn } = createImageModal();
+
+function showImageModal(img) {
+  const modal = document.getElementById('image-preview-modal');
+  if (modal) {
+    const previewImg = document.getElementById('preview-image');
+    previewImg.src = img.src;
+    modal.style.display = 'flex';
+    
+    // Add explicit click handler to modal close button
+    const closeBtn = document.getElementById('close-image-preview');
+    if (closeBtn) {
+      // Clear any existing handlers by cloning
+      const newCloseBtn = closeBtn.cloneNode(true);
+      closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+      
+      // Add click handler
+      newCloseBtn.addEventListener('click', function() {
+        modal.style.display = 'none';
+      });
+      
+      // Add touchstart handler for iOS
+      newCloseBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        modal.style.display = 'none';
+      });
+    }
+    
+    // Also allow clicking anywhere on the modal background to close
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+    
+    // Add touchstart for iOS modal background
+    modal.addEventListener('touchstart', function(e) {
+      if (e.target === modal) {
+        e.preventDefault();
+        modal.style.display = 'none';
+      }
+    });
+  }
+}
+
+closeBtn.onclick = () => {
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+};
+
+modal.onclick = (e) => {
+  if (e.target === modal) {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+};
+// Recording and sending audio
+recordButton.addEventListener('mousedown', async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Audio recording is not supported in this browser.');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = event => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    mediaRecorder.start();
+    console.log('Recording started...');
+  } catch (err) {
+    console.error('Error accessing microphone:', err);
+    alert('Could not access microphone.');
+  }
+});
+
+recordButton.addEventListener('mouseup', () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.onstop = () => {
+      console.log('Recording stopped.');
+      const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+      showAudioPreview(audioBlob);
+    };
+  }
+});
+
+recordButton.addEventListener('touchstart', async (e) => {
+  e.preventDefault();
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Audio recording is not supported in this browser.');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = event => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+    mediaRecorder.start();
+    console.log('Recording started (touch)...');
+  } catch (err) {
+    console.error('Error accessing microphone:', err);
+    alert('Could not access microphone.');
+  }
+});
+
+recordButton.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.onstop = () => {
+      console.log('Recording stopped (touch).');
+      const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+      showAudioPreview(audioBlob);
+    };
+  }
+});
+
+// Show audio preview with accept/cancel buttons
+function showAudioPreview(audioBlob) {
+  const audioUrl = URL.createObjectURL(audioBlob);
+  const audioElement = document.createElement('audio');
+  audioElement.controls = true;
+  audioElement.src = audioUrl;
+  const acceptButton = document.createElement('button');
+  acceptButton.textContent = 'Send Audio';
+  acceptButton.style.margin = '5px';
+  acceptButton.addEventListener('click', () => {
+    sendAudioMessage(audioBlob);
+    hideAudioPreview();
+  });
+  const cancelButton = document.createElement('button');
+  cancelButton.textContent = 'Cancel';
+  cancelButton.style.margin = '5px';
+  cancelButton.addEventListener('click', hideAudioPreview);
+  audioPreviewContainer.innerHTML = '';
+  audioPreviewContainer.appendChild(audioElement);
+  audioPreviewContainer.appendChild(acceptButton);
+  audioPreviewContainer.appendChild(cancelButton);
+  audioPreviewContainer.style.display = 'block';
+}
+
+function hideAudioPreview() {
+  audioPreviewContainer.style.display = 'none';
+  audioPreviewContainer.innerHTML = '';
+}
+
+// Upload audio and mark as recorded
+async function sendAudioMessage(audioBlob) {
+  if (!currentConversation) {
+    alert("Please select a conversation first.");
+    return;
+  }
+  
+  const timestamp = Date.now();
+  const file = new File([audioBlob], `audio_${timestamp}.mp3`, { type: 'audio/mp3' });
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    const uploadResponse = await debugFetch('/upload', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!uploadResponse.ok) {
+      const errorData = await uploadResponse.json();
+      throw new Error(errorData.error || 'Upload failed');
+    }
+    
+    const uploadData = await uploadResponse.json();
+    
+    if (uploadData.url) {
+      const now = new Date();
+      const fileMessage = {
+        to: currentConversation,
+        fileUrl: uploadData.url,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        timestamp: formatTime(now),
+        dayLabel: formatDayLabel(now),
+        recorded: true
+      };
+      
+      socket.emit('file message', fileMessage);
+    }
+  } catch (error) {
+    console.error('Upload error:', error);
+    alert(`Failed to upload audio: ${error.message}`);
+  }
+}
+
+// Transcribe audio and display transcript
+async function transcribeAudio(fileUrl, bubble) {
+  // Check if transcript already exists
+  const existingTranscript = bubble.querySelector('.transcript-result');
+  if (existingTranscript) {
+    // Toggle visibility if it already exists
+    existingTranscript.style.display = existingTranscript.style.display === 'none' ? 'block' : 'none';
+    return;
+  }
+
+  // Create loading indicator
+  const loadingElement = document.createElement('div');
+  loadingElement.className = 'transcript-loading';
+  loadingElement.textContent = 'Transcribing audio...';
+  bubble.appendChild(loadingElement);
+
+  try {
+    // Get filename from URL
+    const filename = fileUrl.split('/').pop();
+    
+    const response = await fetch('/transcribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ url: fileUrl })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to transcribe audio');
+    }
+
+    const data = await response.json();
+    
+    // Remove loading indicator
+    bubble.removeChild(loadingElement);
+    
+    // Create and append transcript element with proper styling
+    const transcriptElement = document.createElement('div');
+    transcriptElement.className = 'transcript-result';
+    transcriptElement.style.padding = '8px';
+    transcriptElement.style.margin = '8px 0';
+    transcriptElement.style.backgroundColor = '#f0f0f0';
+    transcriptElement.style.borderRadius = '8px';
+    transcriptElement.style.maxWidth = '100%';
+    transcriptElement.style.wordBreak = 'break-word';
+    transcriptElement.style.fontSize = '14px';
+    transcriptElement.style.lineHeight = '1.4';
+    
+    // Clean and format the transcript text
+    const cleanText = data.text ? data.text.trim() : 'No transcript available';
+    transcriptElement.textContent = cleanText;
+    
+    bubble.appendChild(transcriptElement);
+  } catch (error) {
+    console.error('Error transcribing audio:', error);
+    
+    // Remove loading indicator
+    if (bubble.contains(loadingElement)) {
+      bubble.removeChild(loadingElement);
+    }
+    
+    // Show error message
+    const errorElement = document.createElement('div');
+    errorElement.className = 'transcript-result';
+    errorElement.textContent = 'Could not transcribe audio. Please try again.';
+    errorElement.style.color = '#e53935';
+    bubble.appendChild(errorElement);
+  }
+}
+
+function showTranscript(bubble, fileUrl, transcriptText) {
+  const originalContent = bubble.innerHTML;
+  const transcriptHTML = `
+    <div class="transcript-view">
+      <p>${transcriptText}</p>
+      <button class="return-audio-btn">Return to Audio</button>
+    </div>
+  `;
+  bubble.innerHTML = transcriptHTML;
+  const returnBtn = bubble.querySelector('.return-audio-btn');
+  returnBtn.addEventListener('click', () => {
+    bubble.innerHTML = originalContent;
+    const newTranscriptBtn = bubble.querySelector('.transcript-btn');
+    if (newTranscriptBtn) {
+      newTranscriptBtn.addEventListener('click', () => {
+        showTranscript(bubble, fileUrl, transcriptText);
+      });
+    }
+  });
+}
+
+// Helper Functions
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+function showError(message) {
+  alert(message); // Replace with a better UI notification system
+}
+
+function downloadFile(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// Detect iOS devices more accurately
+function isIOSDevice() {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return /ipad|iphone|ipod|mac/.test(userAgent) && !window.MSStream;
+}
+
+// Enhanced touchable button function to make buttons more responsive on iOS
+function makeButtonIOSFriendly(buttonElement) {
+  if (!buttonElement) return;
+  
+  // Clear any existing event listeners by cloning
+  const newButton = buttonElement.cloneNode(true);
+  buttonElement.parentNode.replaceChild(newButton, buttonElement);
+  
+  // Add a visual feedback class on touch
+  newButton.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    this.classList.add('ios-active');
+    
+    // Safety fallback timeout to remove the class
+    setTimeout(() => {
+      this.classList.remove('ios-active');
+    }, 300);
+  }, false);
+  
+  // Remove feedback on touch end
+  newButton.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    this.classList.remove('ios-active');
+    
+    // Simulate click
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window
+    });
+    this.dispatchEvent(clickEvent);
+  }, false);
+  
+  // Also handle touchcancel
+  newButton.addEventListener('touchcancel', function(e) {
+    this.classList.remove('ios-active');
+  }, false);
+  
+  return newButton;
+}
+
+// Update socket.on('connect') handler
+socket.on('connect', () => {
+  console.log('Socket connected');
+  
+  // Use our improved iOS detection
+  const isAppleDevice = isIOSDevice();
+  
+  if (isAppleDevice) {
+    console.log('iOS device detected, setting up enhanced compatibility mode');
+    document.body.classList.add('ios-device');
+    
+    // Apply improved styling for iOS
+    const style = document.createElement('style');
+    style.textContent = `
+      .ios-device button, .ios-device .login-tab, .ios-device .user-item {
+        cursor: pointer;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: rgba(0,0,0,0);
+        padding: 14px !important; /* Larger touch targets */
+      }
+      
+      .ios-device input[type="text"], .ios-device input[type="password"] {
+        font-size: 16px !important; /* Prevent zoom on input focus */
+      }
+      
+      .ios-active {
+        opacity: 0.7;
+        background-color: rgba(0,0,0,0.1) !important;
+      }
+      
+      .ios-device .back-button {
+        min-width: 44px;
+        min-height: 44px;
+        font-size: 18px;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Enhance all buttons for iOS
+    document.querySelectorAll('button').forEach(makeButtonIOSFriendly);
+    
+    // Try auto-login with fallback auth
+    const savedUsername = localStorage.getItem('username');
+    const savedPassword = localStorage.getItem('password');
+    
+    if (savedUsername && savedPassword) {
+      console.log('iOS: Attempting auto-login with enhanced fallback auth');
+      socket.emit('check auth', { username: savedUsername, password: savedPassword });
+    }
+  }
+});
+
+// Specifically fix iOS back button issues
+document.addEventListener('DOMContentLoaded', function() {
+  function enhanceBackButton() {
+    const backButton = document.querySelector('.back-button');
+    if (backButton && isIOSDevice()) {
+      console.log('Enhancing back button for iOS');
+      
+      // Make button larger and more touch-friendly
+      backButton.style.minWidth = '44px';
+      backButton.style.minHeight = '44px';
+      backButton.style.fontSize = '18px';
+      
+      // Add both touch and click handlers
+      const enhancedButton = makeButtonIOSFriendly(backButton);
+      
+      enhancedButton.addEventListener('click', function() {
+        console.log('Back button clicked on iOS');
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+          sidebar.classList.add('active');
+          const chatArea = document.getElementById('chat-area');
+          if (chatArea) chatArea.style.zIndex = '50';
+          sidebar.style.zIndex = '100';
+        }
+      });
+    }
+  }
+  
+  // Initial enhancement
+  enhanceBackButton();
+  
+  // Re-enhance when chat header changes (when selecting a conversation)
+  const chatHeader = document.getElementById('chat-header');
+  if (chatHeader) {
+    const observer = new MutationObserver(function(mutations) {
+      enhanceBackButton();
+    });
+    
+    observer.observe(chatHeader, { childList: true });
+  }
+});
+
+// Fix group item click handling specifically for iOS
+function handleGroupSelection(groupItem) {
+  console.log('Group item selected:', groupItem.dataset);
+  
+  // Get group data
+  const groupId = groupItem.dataset.id;
+  const groupName = groupItem.dataset.username || groupItem.querySelector('.user-name').textContent;
+  
+  if (!groupId) {
+    console.error('Missing group ID in selection');
+    return;
+  }
+  
+  // Set current conversation
+  currentConversation = groupId;
+  console.log(`Selected group chat: ${groupName} (${currentConversation})`);
+  
+  // Update UI
+  document.querySelectorAll('#users-list li').forEach(li => li.classList.remove('active'));
+  groupItem.classList.add('active');
+  
+  // Update header
+  const chatHeader = document.getElementById('chat-header');
+  chatHeader.innerHTML = `
+    <button class="back-button">←</button>
+    <h2>${groupName}</h2>
+  `;
+  
+  // Add back button handler - enhanced for iOS
+  setupBackButton();
+  
+  // Load group messages
+  console.log(`Loading messages for group ${currentConversation}`);
+  socket.emit('load group messages', { groupId: currentConversation });
+  
+  // On mobile, show chat area
+  if (window.innerWidth <= 768) {
+    showChat();
+  }
+}
+
+// Group chat functionality
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("Initializing group chat functionality");
+  
+  // Initialize group creation button
+  const createGroupBtn = document.getElementById('create-group-btn');
+  const createGroupModal = document.getElementById('create-group-modal');
+  const closeGroupModal = document.getElementById('close-group-modal');
+  const createGroupSubmit = document.getElementById('create-group-submit');
+  const membersList = document.getElementById('members-list');
+  
+  // Group button click handler
+  if (createGroupBtn) {
+    createGroupBtn.addEventListener('click', function() {
+      console.log("Create group button clicked");
+      // Populate members list
+      populateGroupMembers();
+      // Show modal
+      if (createGroupModal) {
+        createGroupModal.style.display = 'flex';
+      }
+    });
+  }
+  
+  // Close modal button
+  if (closeGroupModal) {
+    closeGroupModal.addEventListener('click', function() {
+      createGroupModal.style.display = 'none';
+    });
+  }
+  
+  // Close modal when clicking outside
+  window.addEventListener('click', function(event) {
+    if (event.target === createGroupModal) {
+      createGroupModal.style.display = 'none';
+    }
+  });
+  
+  // Group creation submit button
+  if (createGroupSubmit) {
+    createGroupSubmit.addEventListener('click', function() {
+      createGroup();
+    });
+  }
+  
+  // Function to populate members list
+  function populateGroupMembers() {
+    if (!membersList) {
+      console.error("Members list element not found");
+      return;
+    }
+    
+    // Clear existing list
+    membersList.innerHTML = '';
+    
+    // Get all users from sidebar
+    const userItems = document.querySelectorAll('#users-list li');
+    console.log(`Found ${userItems.length} potential members to add to group`);
+    
+    if (userItems.length === 0) {
+      membersList.innerHTML = '<p>No contacts available. Add contacts first.</p>';
+      return;
+    }
+    
+    let membersAdded = 0;
+    
+    userItems.forEach(userItem => {
+      // Extract username - looking for both formats
+      let userName = '';
+      const userNameEl = userItem.querySelector('.user-name');
+      
+      if (userNameEl) {
+        userName = userNameEl.textContent;
+      } else {
+        // Fallback to text content without status indicators
+        userName = userItem.textContent.trim().replace(/▪|●|⚫|➤/g, '').trim();
+        
+        // Further clean up if needed
+        if (userName.includes('online')) {
+          userName = userName.split('online')[0].trim();
+        } else if (userName.includes('offline')) {
+          userName = userName.split('offline')[0].trim();
+        }
+      }
+      
+      // Skip if it's a group or empty name
+      if (userItem.classList.contains('group') || !userName) {
+        return;
+      }
+      
+      console.log(`Adding ${userName} to member selection list`);
+      
+      // Create member item with enhanced styling for better touch interaction
+      const memberItem = document.createElement('div');
+      memberItem.className = 'member-item';
+      memberItem.innerHTML = `
+        <label style="display:flex; align-items:center; padding:8px;">
+          <input type="checkbox" name="group-members" value="${userName}" style="width:24px; height:24px; margin-right:10px;">
+          <span style="font-size:16px;">${userName}</span>
+        </label>
+      `;
+      
+      membersList.appendChild(memberItem);
+      membersAdded++;
+    });
+    
+    console.log(`Added ${membersAdded} members to the selection list`);
+  }
+  
+  // Function to create a group
+  function createGroup() {
+    console.log("Create group button clicked");
+    
+    const groupName = document.getElementById('group-name-input').value.trim();
+    if (!groupName) {
+      alert('Please enter a group name');
+      return;
+    }
+    
+    // Get selected members
+    const selectedMembers = [];
+    const checkboxes = document.querySelectorAll('input[name="group-members"]:checked');
+    
+    checkboxes.forEach(checkbox => {
+      selectedMembers.push(checkbox.value);
+    });
+    
+    if (selectedMembers.length === 0) {
+      alert('Please select at least one member');
+      return;
+    }
+    
+    console.log(`Creating group "${groupName}" with members:`, selectedMembers);
+    
+    // Create the group via socket
+    socket.emit('create group', { 
+      name: groupName,
+      members: selectedMembers
+    });
+    
+    // Close modal
+    createGroupModal.style.display = 'none';
+    
+    // Clear the form
+    document.getElementById('group-name-input').value = '';
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+  }
+  
+  // Socket handler for when a group is created
+  socket.on('group created', (groupData) => {
+    console.log("Received group_created event with data:", groupData);
+    // Add the group to the sidebar
+    addGroupToSidebar(groupData);
+  });
+  
+  // Function to add a group to the sidebar
+  function addGroupToSidebar(group) {
+    console.log(`Adding group "${group.name}" to sidebar`);
+    
+    const usersList = document.getElementById('users-list');
+    if (!usersList) {
+      console.error("Users list element not found");
+      return;
+    }
+    
+    const userItem = document.createElement('li');
+    userItem.className = 'user-item group';
+    userItem.dataset.type = 'group';
+    userItem.dataset.id = group.id;
+    userItem.dataset.username = group.name;
+    
+    const firstLetter = group.name.charAt(0).toUpperCase();
+    
+    userItem.innerHTML = `
+      <div class="avatar group-avatar">${firstLetter}</div>
+      <div class="user-info">
+        <div class="user-name">${group.name}</div>
+        <div class="last-message">${group.members.length} members</div>
+      </div>
+      <button class="group-manage-btn" data-group-id="${group.id}">⚙️</button>
+    `;
+    
+    // Add click handler for the group item
+    userItem.addEventListener('click', function(e) {
+      // Skip if clicked on the manage button
+      if (e.target.closest('.group-manage-btn')) {
+        return;
+      }
+      console.log('Group item clicked:', this.dataset);
+      handleGroupSelection(this);
+    });
+    
+    // Add click handler for the manage button
+    const manageBtn = userItem.querySelector('.group-manage-btn');
+    if (manageBtn) {
+      manageBtn.addEventListener('click', function(e) {
+        e.stopPropagation(); // Prevent triggering the group item click
+        console.log('Manage button clicked for group:', group.id);
+        openGroupManagementModal(userItem);
+      });
+    }
+    
+    usersList.appendChild(userItem);
+    console.log(`Group "${group.name}" added to sidebar successfully`);
+  }
+  
+  // Better group chat history display
+  socket.on('group chat history', (msgs) => {
+    console.log(`Received ${msgs.length} group messages`);
+    
+    // Clear messages container
+    messages.innerHTML = '';
+    lastDisplayedDay = null;
+    
+    // Display each message
+    msgs.forEach(msg => {
+      if (msg.isFileMessage) {
+        displayGroupFileMessage(msg);
+      } else {
+        displayGroupMessage(msg);
+      }
+    });
+    
+    // Scroll to bottom
+    setTimeout(() => {
+      messages.scrollTop = messages.scrollHeight;
+    }, 100);
+  });
+  
+  // Dedicated function for displaying group messages
+  function displayGroupMessage(msg) {
+    // Add day header if needed
+    if (lastDisplayedDay !== msg.dayLabel) {
+      const header = document.createElement('li');
+      header.className = 'day-header';
+      header.textContent = msg.dayLabel;
+      header.style.listStyleType = 'none';
+      messages.appendChild(header);
+      lastDisplayedDay = msg.dayLabel;
+    }
+    
+    const bubble = document.createElement('li');
+    bubble.className = msg.from === currentUser ? 'message-from-me' : 'message-from-others';
+    bubble.style.listStyleType = 'none';
+    
+    // Create the message bubble
+    const messageBubble = document.createElement('div');
+    messageBubble.className = 'message-bubble';
+    
+    // Add sender name if not from current user
+    if (msg.from !== currentUser) {
+      const senderName = document.createElement('div');
+      senderName.className = 'message-sender';
+      senderName.textContent = msg.from;
+      messageBubble.appendChild(senderName);
+    }
+    
+    // Add message text
+    const messageText = document.createElement('div');
+    messageText.className = 'message-text';
+    messageText.textContent = msg.msg;
+    messageBubble.appendChild(messageText);
+    
+    // Add timestamp
+    const timeElement = document.createElement('div');
+    timeElement.className = 'message-time';
+    timeElement.textContent = msg.timestamp;
+    messageBubble.appendChild(timeElement);
+    
+    bubble.appendChild(messageBubble);
+    messages.appendChild(bubble);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  
+  // Display a group file message
+  function displayGroupFileMessage(msg) {
+    // Add day header if needed
+    if (lastDisplayedDay !== msg.dayLabel) {
+      const header = document.createElement('li');
+      header.className = 'day-header';
+      header.textContent = msg.dayLabel;
+      header.style.listStyleType = 'none';
+      messages.appendChild(header);
+      lastDisplayedDay = msg.dayLabel;
+    }
+    
+    const bubble = document.createElement('li');
+    bubble.className = msg.from === currentUser ? 'message-from-me' : 'message-from-others';
+    bubble.style.listStyleType = 'none';
+    
+    // Convert file size for display
+    const formattedSize = formatFileSize(msg.fileSize || 0);
+    
+    // Container for the entire message content
+    const messageBubble = document.createElement('div');
+    messageBubble.className = 'message-bubble';
+    
+    // Add sender name if not from current user
+    if (msg.from !== currentUser) {
+      const senderName = document.createElement('div');
+      senderName.className = 'message-sender';
+      senderName.textContent = msg.from;
+      messageBubble.appendChild(senderName);
+    }
+    
+    // Special handling for audio files
+    if (msg.fileType && msg.fileType.startsWith('audio/')) {
+      // Create WhatsApp-like audio player container
+      const audioContainer = document.createElement('div');
+      audioContainer.className = 'audio-message-container';
+      audioContainer.style.position = 'relative';
+      audioContainer.style.paddingRight = '36px'; // Add space for the transcript button
+      audioContainer.style.width = '100%';
+      audioContainer.style.boxSizing = 'border-box';
+      audioContainer.style.overflowX = 'hidden';
+      
+      // Add play button
+      const playButton = document.createElement('button');
+      playButton.className = 'audio-play-button';
+      playButton.innerHTML = '<i class="play-icon">▶</i>';
+      playButton.style.flexShrink = '0';
+      
+      // Add waveform visualization with consistent width
+      const waveform = document.createElement('div');
+      waveform.className = 'audio-waveform';
+      waveform.style.width = 'calc(100% - 30px)'; // Account for play button
+      waveform.style.overflowX = 'hidden';
+      waveform.style.flexShrink = '1';
+      
+      // Generate simple waveform visualization
+      for (let i = 0; i < 27; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'waveform-bar';
+        // Create random heights for aesthetic effect
+        bar.style.height = `${Math.floor(Math.random() * 13) + 5}px`;
+        waveform.appendChild(bar);
+      }
+      
+      // Add duration/info element
+      const audioInfo = document.createElement('div');
+      audioInfo.className = 'audio-info';
+      audioInfo.textContent = formattedSize;
+      audioInfo.style.overflow = 'hidden';
+      audioInfo.style.textOverflow = 'ellipsis';
+      audioInfo.style.whiteSpace = 'nowrap';
+      audioInfo.style.fontSize = '12px';
+      audioInfo.style.color = '#666';
+      audioInfo.style.marginRight = '4px';
+      
+      // Actual audio element (hidden)
+      const audio = document.createElement('audio');
+      audio.src = msg.fileUrl;
+      audio.preload = 'metadata';
+      
+      // Add transcript button
+      const transcriptBtn = document.createElement('button');
+      transcriptBtn.className = 'transcript-button';
+      transcriptBtn.innerHTML = '📝';
+      transcriptBtn.title = 'Get transcript';
+      transcriptBtn.style.minWidth = '24px';
+      transcriptBtn.style.width = '24px';
+      transcriptBtn.style.height = '24px';
+      transcriptBtn.style.padding = '0';
+      transcriptBtn.style.display = 'flex';
+      transcriptBtn.style.justifyContent = 'center';
+      transcriptBtn.style.alignItems = 'center';
+      transcriptBtn.style.fontSize = '12px';
+      transcriptBtn.style.position = 'absolute';
+      transcriptBtn.style.right = '8px';
+      transcriptBtn.style.top = '50%';
+      transcriptBtn.style.transform = 'translateY(-50%)';
+      transcriptBtn.style.border = 'none';
+      transcriptBtn.style.borderRadius = '50%';
+      transcriptBtn.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+      
+      // Event listener for play button
+      playButton.addEventListener('click', function() {
+        if (audio.paused) {
+          audio.play();
+          playButton.innerHTML = '<i class="play-icon">⏸</i>';
+        } else {
+          audio.pause();
+          playButton.innerHTML = '<i class="play-icon">▶</i>';
+        }
+      });
+      
+      // Add touchstart event for better mobile/iPad compatibility
+      playButton.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        if (audio.paused) {
+          audio.play();
+          playButton.innerHTML = '<i class="play-icon">⏸</i>';
+        } else {
+          audio.pause();
+          playButton.innerHTML = '<i class="play-icon">▶</i>';
+        }
+      });
+      
+      // Event listener for audio completion
+      audio.addEventListener('ended', function() {
+        playButton.innerHTML = '<i class="play-icon">▶</i>';
+      });
+      
+      // Event listener for transcript button
+      transcriptBtn.addEventListener('click', function() {
+        transcribeAudio(msg.fileUrl, messageBubble);
+      });
+      
+      // Add touchstart for better iPad compatibility
+      transcriptBtn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        transcribeAudio(msg.fileUrl, messageBubble);
+      });
+      
+      // Fix the audio metadata loading and duration display
+      audio.addEventListener('loadedmetadata', function() {
+        try {
+          // Check for valid duration to prevent NaN display
+          if (isFinite(audio.duration) && !isNaN(audio.duration)) {
+            const minutes = Math.floor(audio.duration / 60);
+            const seconds = Math.floor(audio.duration % 60);
+            audioInfo.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} · ${formattedSize}`;
+          } else {
+            // Fallback if duration is invalid
+            audioInfo.textContent = formattedSize;
+            
+            // Try again in 1 second (sometimes metadata needs more time)
+            setTimeout(() => {
+              if (isFinite(audio.duration) && !isNaN(audio.duration)) {
+                const minutes = Math.floor(audio.duration / 60);
+                const seconds = Math.floor(audio.duration % 60);
+                audioInfo.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} · ${formattedSize}`;
+              }
+            }, 1000);
+          }
+        } catch (e) {
+          console.error("Error calculating audio duration:", e);
+          audioInfo.textContent = formattedSize;
+        }
+      });
+      
+      // Assemble audio player
+      audioContainer.appendChild(playButton);
+      audioContainer.appendChild(waveform);
+      audioContainer.appendChild(audioInfo);
+      audioContainer.appendChild(transcriptBtn);
+      audioContainer.appendChild(audio);
+      
+      messageBubble.appendChild(audioContainer);
+    }
+    // Special handling for images
+    else if (msg.fileType && msg.fileType.startsWith('image/')) {
+      const imgContainer = document.createElement('div');
+      imgContainer.className = 'image-message-container';
+      
+      const img = document.createElement('img');
+      img.src = msg.fileUrl;
+      img.alt = msg.fileName || 'Image';
+      img.className = 'message-image';
+      img.loading = 'lazy';
+      
+      // Add click event to show image in modal
+      img.addEventListener('click', function() {
+        showImageModal(img);
+      });
+      
+      // Add touchstart for better iPad compatibility
+      img.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        showImageModal(img);
+      });
+      
+      imgContainer.appendChild(img);
+      messageBubble.appendChild(imgContainer);
+    }
+    // Special handling for videos
+    else if (msg.fileType && msg.fileType.startsWith('video/')) {
+      const videoContainer = document.createElement('div');
+      videoContainer.className = 'video-message-container';
+      
+      const video = document.createElement('video');
+      video.src = msg.fileUrl;
+      video.className = 'message-video';
+      video.controls = true;
+      video.preload = 'metadata';
+      
+      videoContainer.appendChild(video);
+      messageBubble.appendChild(videoContainer);
+    }
+    // Default handling for other file types
+    else {
+      const fileElement = document.createElement('div');
+      fileElement.className = 'file-attachment';
+      
+      // Store file type and recorded status for persistence
+      fileElement.dataset.fileType = msg.fileType || '';
+      fileElement.dataset.isAudio = msg.fileType && msg.fileType.startsWith('audio/') ? 'true' : 'false';
+      fileElement.dataset.recorded = msg.recorded ? 'true' : 'false';
+      
+      const fileIcon = document.createElement('div');
+      fileIcon.className = 'file-icon';
+      fileIcon.textContent = '📄';
+      
+      const fileInfo = document.createElement('div');
+      fileInfo.className = 'file-info';
+      
+      const fileNameElement = document.createElement('div');
+      fileNameElement.className = 'file-name';
+      fileNameElement.textContent = msg.fileName || 'File';
+      
+      const fileSizeElement = document.createElement('div');
+      fileSizeElement.className = 'file-size';
+      fileSizeElement.textContent = formattedSize;
+      
+      fileInfo.appendChild(fileNameElement);
+      fileInfo.appendChild(fileSizeElement);
+      
+      const downloadLink = document.createElement('a');
+      downloadLink.href = msg.fileUrl;
+      downloadLink.download = msg.fileName || 'download';
+      downloadLink.className = 'download-link';
+      downloadLink.textContent = 'Download';
+      downloadLink.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+      
+      fileElement.appendChild(fileIcon);
+      fileElement.appendChild(fileInfo);
+      fileElement.appendChild(downloadLink);
+      
+      fileElement.addEventListener('click', () => {
+        downloadFile(msg.fileUrl, msg.fileName);
+      });
+      
+      messageBubble.appendChild(fileElement);
+    }
+    
+    // Add timestamp
+    const timeElement = document.createElement('div');
+    timeElement.className = 'message-time';
+    timeElement.textContent = msg.timestamp;
+    messageBubble.appendChild(timeElement);
+    
+    bubble.appendChild(messageBubble);
+    messages.appendChild(bubble);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  
+  // Handle group message
+  socket.on('group message', (message) => {
+    console.log(`Received group message for ${message.groupId}:`, message);
+    
+    // Only process if this is for the current conversation
+    if (currentConversation === message.groupId) {
+      // Add day header if needed
+      if (lastDisplayedDay !== message.dayLabel) {
+        const header = document.createElement('li');
+        header.className = 'day-header';
+        header.textContent = message.dayLabel;
+        header.style.listStyleType = 'none';
+        messages.appendChild(header);
+        lastDisplayedDay = message.dayLabel;
+      }
+      
+      // Create message bubble
+      const bubble = document.createElement('li');
+      bubble.className = message.from === currentUser ? 'message-from-me' : 'message-from-others';
+      bubble.style.listStyleType = 'none';
+      
+      // Include sender name for messages not from current user
+      const senderName = message.from !== currentUser ? 
+        `<div class="message-sender">${message.from}</div>` : '';
+      
+      // Set message content
+      bubble.innerHTML = `
+        ${senderName}
+        <p class="message-text">${message.msg}</p>
+        <span class="message-time">${message.timestamp}</span>
+      `;
+      
+      // Append and scroll
+      messages.appendChild(bubble);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    
+    // Show notification if message is not from current user
+    if (message.from !== currentUser) {
+      playBeep();
+      showNotification(message.from, `New message in ${message.groupName || 'group chat'}`);
+    }
+  });
+});
+
+// Function to handle contact selection
+function handleContactSelection(item) {
+  console.log('Contact selected:', item.dataset);
+  
+  // Regular user chat selected
+  currentConversation = item.dataset.username;
+  console.log(`Selected chat with user: ${currentConversation}`);
+  
+  // Update UI
+  document.querySelectorAll('#users-list li').forEach(li => li.classList.remove('active'));
+  item.classList.add('active');
+  
+  const chatHeader = document.getElementById('chat-header');
+  chatHeader.innerHTML = `
+    <button class="back-button">←</button>
+    <h2>Chat with ${currentConversation}</h2>
+  `;
+  
+  // Add back button handler
+  setupBackButton();
+  
+  // Reset message display
+  lastDisplayedDay = null;
+  messages.innerHTML = '';
+  
+  // Load private messages
+  socket.emit('load messages', { user: currentConversation });
+  
+  // Clear unread count
+  if (unseenMessages[currentConversation]) {
+    unseenMessages[currentConversation] = 0;
+    const countSpan = item.querySelector('.unseen-count');
+    if (countSpan) {
+      countSpan.remove();
+    }
+  }
+  
+  // On mobile, show chat area
+  if (window.innerWidth <= 768) {
+    showChat();
+  }
+}
+
+// Group management functionality
+document.addEventListener('DOMContentLoaded', function() {
+  // Create group modal elements and functionality
+  setupGroupCreationUI();
+  
+  // Add group management UI to the page
+  setupGroupManagementUI();
+  
+  // Socket handlers for group management
+  setupGroupSocketHandlers();
+});
+
+// Setup UI for creating groups
+function setupGroupCreationUI() {
+  // This is mostly already implemented, just making sure it exists
+  console.log("Setting up group creation UI");
+}
+
+// Setup UI for managing existing groups
+function setupGroupManagementUI() {
+  console.log("Setting up group management UI");
+  
+  // Create elements for the group management modal
+  const groupManageModal = document.createElement('div');
+  groupManageModal.id = 'group-manage-modal';
+  groupManageModal.className = 'modal';
+  groupManageModal.innerHTML = `
+    <div class="modal-content">
+      <span class="close-button" id="close-group-manage-modal">&times;</span>
+      <h2>Manage Group: <span id="manage-group-name"></span></h2>
+      
+      <div class="modal-section">
+        <h3>Current Members</h3>
+        <ul id="current-members-list" class="members-list"></ul>
+      </div>
+      
+      <div class="modal-section">
+        <h3>Add Members</h3>
+        <div id="add-members-list" class="members-list"></div>
+        <button id="add-members-btn" class="action-button">Add Selected Members</button>
+      </div>
+      
+      <div class="modal-section danger-zone">
+        <h3>Danger Zone</h3>
+        <p>Only the creator can delete a group. This action cannot be undone.</p>
+        <button id="delete-group-btn" class="danger-button">Delete Group</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(groupManageModal);
+  
+  // Add styles for the group management modal
+  const style = document.createElement('style');
+  style.textContent = `
+    .modal-section {
+      margin-bottom: 20px;
+      padding: 10px;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+    }
+    
+    .members-list {
+      max-height: 200px;
+      overflow-y: auto;
+      margin: 10px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .member-item {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .danger-zone {
+      background-color: rgba(255, 0, 0, 0.05);
+      border: 1px solid rgba(255, 0, 0, 0.2);
+    }
+    
+    .action-button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .danger-button {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    .member-badge {
+      display: inline-block;
+      background-color: #e0e0e0;
+      padding: 4px 8px;
+      margin: 4px;
+      border-radius: 16px;
+      font-size: 14px;
+    }
+    
+    .creator-badge {
+      background-color: #ffd700;
+    }
+  `;
+  document.head.appendChild(style);
+  
+  // Add event listener to open group management modal
+  document.addEventListener('click', function(e) {
+    // We'll add this click event to group items in the UI
+    if (e.target.closest('.group-manage-btn')) {
+      const groupItem = e.target.closest('.user-item.group');
+      if (groupItem) {
+        openGroupManagementModal(groupItem);
+      }
+    }
+  });
+  
+  // Close modal event
+  const closeGroupManageBtn = document.getElementById('close-group-manage-modal');
+  if (closeGroupManageBtn) {
+    closeGroupManageBtn.addEventListener('click', function() {
+      document.getElementById('group-manage-modal').style.display = 'none';
+    });
+  }
+  
+  // Close modal when clicking outside
+  window.addEventListener('click', function(event) {
+    const modal = document.getElementById('group-manage-modal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+    }
+  });
+  
+  // Add members button handler
+  const addMembersBtn = document.getElementById('add-members-btn');
+  if (addMembersBtn) {
+    addMembersBtn.addEventListener('click', function() {
+      addMembersToGroup();
+    });
+  }
+  
+  // Delete group button handler
+  const deleteGroupBtn = document.getElementById('delete-group-btn');
+  if (deleteGroupBtn) {
+    deleteGroupBtn.addEventListener('click', function() {
+      const confirmed = confirm('Are you sure you want to delete this group? This action cannot be undone.');
+      if (confirmed) {
+        deleteGroup();
+      }
+    });
+  }
+}
+
+let currentlyManagingGroupId = null;
+let currentlyManagingGroupCreator = null;
+
+// Function to open the group management modal
+function openGroupManagementModal(groupItem) {
+  // Get group data
+  const groupId = groupItem.dataset.id;
+  const groupName = groupItem.dataset.username || groupItem.querySelector('.user-name').textContent;
+  
+  // Set current group being managed
+  currentlyManagingGroupId = groupId;
+  
+  // Update modal title
+  document.getElementById('manage-group-name').textContent = groupName;
+  
+  // Fetch contacts to populate the add members list
+  fetchGroupDetails(groupId);
+  
+  // Show the modal
+  document.getElementById('group-manage-modal').style.display = 'block';
+}
+
+// Fetch group details to populate the modal
+async function fetchGroupDetails(groupId) {
+  // Clear existing lists
+  document.getElementById('current-members-list').innerHTML = '';
+  document.getElementById('add-members-list').innerHTML = '';
+  
+  // This would typically be an API call, but we'll use socket.io
+  socket.emit('get group details', { groupId });
+}
+
+// Add members to the group
+function addMembersToGroup() {
+  if (!currentlyManagingGroupId) return;
+  
+  // Get selected members
+  const selectedMembers = [];
+  const checkboxes = document.querySelectorAll('#add-members-list input[type="checkbox"]:checked');
+  
+  checkboxes.forEach(checkbox => {
+    selectedMembers.push(checkbox.value);
+  });
+  
+  if (selectedMembers.length === 0) {
+    alert('Please select at least one member to add.');
+    return;
+  }
+  
+  // Send add members request to server
+  socket.emit('add group members', {
+    groupId: currentlyManagingGroupId,
+    newMembers: selectedMembers
+  });
+  
+  // Close the modal
+  document.getElementById('group-manage-modal').style.display = 'none';
+}
+
+// Delete the current group
+function deleteGroup() {
+  if (!currentlyManagingGroupId) return;
+  
+  // Check if current user is the creator
+  if (currentlyManagingGroupCreator !== currentUser) {
+    alert('Only the group creator can delete the group.');
+    return;
+  }
+  
+  // Send delete request to server
+  socket.emit('delete group', {
+    groupId: currentlyManagingGroupId
+  });
+  
+  // Close the modal
+  document.getElementById('group-manage-modal').style.display = 'none';
+}
+
+// Set up socket handlers for group management
+function setupGroupSocketHandlers() {
+  // Handler for getting group details
+  socket.on('group details', (data) => {
+    console.log('Received group details:', data);
+    
+    // Save the creator info for permissions
+    currentlyManagingGroupCreator = data.creator;
+    
+    // Update current members list
+    const currentMembersList = document.getElementById('current-members-list');
+    currentMembersList.innerHTML = '';
+    
+    data.members.forEach(member => {
+      const isCreator = member === data.creator;
+      const memberItem = document.createElement('div');
+      memberItem.className = 'member-item';
+      memberItem.innerHTML = `
+        <span class="member-badge ${isCreator ? 'creator-badge' : ''}">
+          ${member} ${isCreator ? '(Creator)' : ''}
+        </span>
+      `;
+      currentMembersList.appendChild(memberItem);
+    });
+    
+    // Update add members list with contacts who aren't already members
+    const addMembersList = document.getElementById('add-members-list');
+    addMembersList.innerHTML = '';
+    
+    // Get all contacts that aren't in the group
+    const currentMembers = new Set(data.members);
+    const contacts = data.availableContacts || [];
+    
+    if (contacts.length === 0) {
+      addMembersList.innerHTML = '<p>No additional contacts available to add.</p>';
+    } else {
+      contacts.forEach(contact => {
+        if (!currentMembers.has(contact)) {
+          const memberItem = document.createElement('div');
+          memberItem.className = 'member-item';
+          memberItem.innerHTML = `
+            <label>
+              <input type="checkbox" name="add-member" value="${contact}">
+              ${contact}
+            </label>
+          `;
+          addMembersList.appendChild(memberItem);
+        }
+      });
+    }
+    
+    // Show/hide delete button based on whether user is creator
+    const deleteGroupBtn = document.getElementById('delete-group-btn');
+    if (data.creator === currentUser) {
+      deleteGroupBtn.style.display = 'block';
+    } else {
+      deleteGroupBtn.style.display = 'none';
+    }
+  });
+  
+  // Handler for group deletion notification
+  socket.on('group deleted', (data) => {
+    console.log('Group deleted:', data);
+    
+    // Show notification
+    alert(`The group "${data.groupName}" has been deleted by ${data.deletedBy}.`);
+    
+    // If we're currently viewing this group, go back to the contacts list
+    if (currentConversation === data.groupId) {
+      // Clear the messages
+      messages.innerHTML = '';
+      currentConversation = null;
+      
+      // Update the header
+      const chatHeader = document.getElementById('chat-header');
+      if (chatHeader) {
+        chatHeader.innerHTML = '<h2>Select a conversation</h2>';
+      }
+    }
+    
+    // Refresh user list to remove the group
+    socket.emit('load users');
+  });
+  
+  // Handler for receiving new members added to group
+  socket.on('group members added', (data) => {
+    console.log('Members added to group:', data);
+    
+    // Show notification
+    const addedMembers = data.addedMembers.join(', ');
+    alert(`${data.addedBy} added new members to the group "${data.groupName}": ${addedMembers}`);
+    
+    // Refresh group details if we're managing this group
+    if (currentlyManagingGroupId === data.groupId && 
+        document.getElementById('group-manage-modal').style.display === 'block') {
+      fetchGroupDetails(data.groupId);
+    }
+  });
+  
+  // Handler for being added to a group
+  socket.on('added to group', (data) => {
+    console.log('You were added to a group:', data);
+    
+    // Show notification
+    alert(`You have been added to the group "${data.groupName}" by ${data.addedBy}`);
+    
+    // Refresh user list to show the new group
+    socket.emit('load users');
+  });
+}
+
+// Reliable function to detect touch-capable devices
+function isTouchDevice() {
+  return (('ontouchstart' in window) ||
+     (navigator.maxTouchPoints > 0) ||
+     (navigator.msMaxTouchPoints > 0));
+}
+
+const eventType = isTouchDevice() ? 'touchend' : 'click';
+
+// Chat header options menu
+document.addEventListener('DOMContentLoaded', function() {
+  const chatMenuBtn = document.getElementById('chat-menu-btn');
+  
+  if (chatMenuBtn) {
+    chatMenuBtn.addEventListener('click', function(e) {
+      // Create a dropdown menu for chat options
+      const dropdown = document.createElement('div');
+      dropdown.className = 'chat-header-dropdown';
+      dropdown.style.position = 'absolute';
+      dropdown.style.right = '10px';
+      dropdown.style.top = '50px';
+      dropdown.style.backgroundColor = 'white';
+      dropdown.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+      dropdown.style.borderRadius = '8px';
+      dropdown.style.zIndex = '1000';
+      dropdown.style.minWidth = '200px';
+      
+      // Add menu options
+      dropdown.innerHTML = `
+        <div class="chat-menu-item" id="send-to-ai">Send message to AI Assistant</div>
+        <div class="chat-menu-item" id="correct-message">Correct message with AI</div>
+      `;
+      
+      // Style menu items
+      const menuItems = dropdown.querySelectorAll('.chat-menu-item');
+      menuItems.forEach(item => {
+        item.style.padding = '12px 16px';
+        item.style.cursor = 'pointer';
+        item.style.transition = 'background-color 0.2s';
+        
+        item.addEventListener('mouseover', function() {
+          this.style.backgroundColor = '#f5f5f5';
+        });
+        
+        item.addEventListener('mouseout', function() {
+          this.style.backgroundColor = 'transparent';
+        });
+      });
+      
+      // Add functionality to menu items
+      dropdown.querySelector('#send-to-ai').addEventListener('click', function() {
+        const inputMessage = document.getElementById('input').value.trim();
+        if (inputMessage) {
+          // Set the message in the AI chat input and open the AI tools modal
+          const aiChatInput = document.getElementById('ai-chat-input');
+          if (aiChatInput) {
+            aiChatInput.value = inputMessage;
+            
+            // Show the AI tools modal and select the assistant tab
+            const aiToolsModal = document.getElementById('ai-tools-modal');
+            const assistantTab = document.querySelector('.ai-tool-tab[data-tab="assistant"]');
+            
+            if (aiToolsModal && assistantTab) {
+              aiToolsModal.style.display = 'flex';
+              
+              // Activate the assistant tab
+              document.querySelectorAll('.ai-tool-tab').forEach(tab => tab.classList.remove('active'));
+              assistantTab.classList.add('active');
+              
+              document.querySelectorAll('.ai-tool-content').forEach(content => content.classList.remove('active'));
+              document.getElementById('assistant-tab').classList.add('active');
+              
+              // Focus on the AI chat input
+              setTimeout(() => {
+                aiChatInput.focus();
+              }, 100);
+            }
+          }
+        }
+        
+        // Remove the dropdown
+        document.body.removeChild(dropdown);
+      });
+      
+      dropdown.querySelector('#correct-message').addEventListener('click', function() {
+        const inputMessage = document.getElementById('input').value.trim();
+        if (inputMessage) {
+          // Set the message in the correction input and open the AI tools modal
+          const correctionInput = document.getElementById('correction-input');
+          if (correctionInput) {
+            correctionInput.value = inputMessage;
+            
+            // Show the AI tools modal and select the correction tab
+            const aiToolsModal = document.getElementById('ai-tools-modal');
+            const correctionTab = document.querySelector('.ai-tool-tab[data-tab="correction"]');
+            
+            if (aiToolsModal && correctionTab) {
+              aiToolsModal.style.display = 'flex';
+              
+              // Activate the correction tab
+              document.querySelectorAll('.ai-tool-tab').forEach(tab => tab.classList.remove('active'));
+              correctionTab.classList.add('active');
+              
+              document.querySelectorAll('.ai-tool-content').forEach(content => content.classList.remove('active'));
+              document.getElementById('correction-tab').classList.add('active');
+              
+              // Focus on the correction input
+              setTimeout(() => {
+                correctionInput.focus();
+              }, 100);
+            }
+          }
+        }
+        
+        // Remove the dropdown
+        document.body.removeChild(dropdown);
+      });
+      
+      // Add the dropdown to the body
+      document.body.appendChild(dropdown);
+      
+      // Close dropdown when clicking outside
+      function handleClickOutside(e) {
+        if (!dropdown.contains(e.target) && e.target !== chatMenuBtn) {
+          document.body.removeChild(dropdown);
+          document.removeEventListener('click', handleClickOutside);
+        }
+      }
+      
+      // Use setTimeout to avoid immediate triggering of the click event
+      setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+      }, 0);
+    });
+  }
+});
+
+// Function to add AI message suggestion feature
+function setupAiSuggestions() {
+  const messageInput = document.getElementById('input');
+  let typingTimer;
+  let suggestionContainer;
+
+  // Create suggestion container if it doesn't exist
+  if (!document.getElementById('ai-suggestion-container')) {
+    suggestionContainer = document.createElement('div');
+    suggestionContainer.id = 'ai-suggestion-container';
+    suggestionContainer.style.position = 'absolute';
+    suggestionContainer.style.bottom = '60px';
+    suggestionContainer.style.left = '20px';
+    suggestionContainer.style.right = '20px';
+    suggestionContainer.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+    suggestionContainer.style.boxShadow = '0 -2px 10px rgba(0, 0, 0, 0.1)';
+    suggestionContainer.style.borderRadius = '8px';
+    suggestionContainer.style.padding = '10px 15px';
+    suggestionContainer.style.display = 'none';
+    suggestionContainer.style.zIndex = '100';
+    
+    // Add close button
+    const closeBtn = document.createElement('span');
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '5px';
+    closeBtn.style.right = '10px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontSize = '18px';
+    closeBtn.style.color = '#999';
+    
+    closeBtn.addEventListener('click', function() {
+      suggestionContainer.style.display = 'none';
+    });
+    
+    suggestionContainer.appendChild(closeBtn);
+    
+    // Add to body
+    document.body.appendChild(suggestionContainer);
+  } else {
+    suggestionContainer = document.getElementById('ai-suggestion-container');
+  }
+  
+  // Setup input listener for message suggestions
+  if (messageInput) {
+    messageInput.addEventListener('input', function() {
+      const inputText = this.value.trim();
+      
+      // Clear any previous timer
+      clearTimeout(typingTimer);
+      
+      // Hide suggestion container if input is empty
+      if (!inputText || inputText.length < 15) {
+        suggestionContainer.style.display = 'none';
+        return;
+      }
+      
+      // Set a timer to get suggestions after user stops typing for 1 second
+      typingTimer = setTimeout(async function() {
+        try {
+          // Get suggestion from AI
+          const response = await fetch('/ai-chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              message: `Based on this message draft, suggest a single improved or more complete version in less than 50 words: "${inputText}"` 
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to get suggestion');
+          }
+          
+          const data = await response.json();
+          const suggestion = data.reply.replace(/^"/, '').replace(/"$/, '');
+          
+          // If no suggestion or same as input, don't show
+          if (!suggestion || suggestion === inputText || suggestion.includes("I don't think")) {
+            suggestionContainer.style.display = 'none';
+            return;
+          }
+          
+          // Display suggestion
+          suggestionContainer.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 5px; color: #128C7E;">AI Suggestion:</div>
+            <div>${suggestion}</div>
+            <div style="margin-top: 10px; display: flex; gap: 10px;">
+              <button id="use-suggestion" style="background-color: #128C7E; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Use Suggestion</button>
+              <button id="close-suggestion" style="background-color: #f0f0f0; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Dismiss</button>
+            </div>
+          `;
+          
+          // Add use suggestion button functionality
+          document.getElementById('use-suggestion').addEventListener('click', function() {
+            messageInput.value = suggestion;
+            suggestionContainer.style.display = 'none';
+          });
+          
+          // Add close button functionality
+          document.getElementById('close-suggestion').addEventListener('click', function() {
+            suggestionContainer.style.display = 'none';
+          });
+          
+          // Show suggestion container
+          suggestionContainer.style.display = 'block';
+          
+        } catch (error) {
+          console.error('Error getting suggestion:', error);
+          suggestionContainer.style.display = 'none';
+        }
+      }, 1000);
+    });
+  }
+}
+
+// Setup AI suggestions when the app is ready
+document.addEventListener('DOMContentLoaded', function() {
+  setupAiSuggestions();
+});
+
+// Add floating context menu for selected text in messages
+document.addEventListener('DOMContentLoaded', function() {
+  // Create a floating context menu
+  const contextMenu = document.createElement('div');
+  contextMenu.id = 'text-context-menu';
+  contextMenu.style.position = 'absolute';
+  contextMenu.style.display = 'none';
+  contextMenu.style.backgroundColor = 'white';
+  contextMenu.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.2)';
+  contextMenu.style.borderRadius = '8px';
+  contextMenu.style.zIndex = '1000';
+  contextMenu.style.overflow = 'hidden';
+  
+  // Add menu items
+  contextMenu.innerHTML = `
+    <div class="context-menu-item" id="analyze-text">Analyze with AI</div>
+    <div class="context-menu-item" id="improve-text">Improve with AI</div>
+    <div class="context-menu-item" id="find-sources">Find Sources</div>
+  `;
+  
+  // Style the menu items
+  const menuItems = contextMenu.querySelectorAll('.context-menu-item');
+  menuItems.forEach(item => {
+    item.style.padding = '10px 15px';
+    item.style.cursor = 'pointer';
+    item.style.transition = 'background-color 0.2s';
+    
+    item.addEventListener('mouseover', function() {
+      this.style.backgroundColor = '#f5f5f5';
+    });
+    
+    item.addEventListener('mouseout', function() {
+      this.style.backgroundColor = 'transparent';
+    });
+  });
+  
+  // Add to body
+  document.body.appendChild(contextMenu);
+  
+  // Track selected text
+  let selectedText = '';
+  
+  // Show context menu on message selection
+  document.addEventListener('mouseup', function(e) {
+    // Get selected text
+    const selection = window.getSelection();
+    selectedText = selection.toString().trim();
+    
+    // Check if selection is within a message
+    if (selectedText && e.target.closest('.message-text')) {
+      // Position the context menu near the mouse
+      contextMenu.style.left = `${e.pageX}px`;
+      contextMenu.style.top = `${e.pageY}px`;
+      contextMenu.style.display = 'block';
+      
+      // Prevent the menu from going off-screen
+      const rect = contextMenu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) {
+        contextMenu.style.left = `${window.innerWidth - rect.width - 10}px`;
+      }
+      if (rect.bottom > window.innerHeight) {
+        contextMenu.style.top = `${e.pageY - rect.height}px`;
+      }
+    } else {
+      // Hide context menu if clicking elsewhere
+      contextMenu.style.display = 'none';
+    }
+  });
+  
+  // Hide context menu when clicking elsewhere
+  document.addEventListener('mousedown', function(e) {
+    if (!contextMenu.contains(e.target)) {
+      contextMenu.style.display = 'none';
+    }
+  });
+  
+  // Handle menu item clicks
+  document.getElementById('analyze-text').addEventListener('click', function() {
+    if (selectedText) {
+      // Open the AI tools modal to the argument checker tab
+      const aiToolsModal = document.getElementById('ai-tools-modal');
+      const argumentTab = document.querySelector('.ai-tool-tab[data-tab="argument"]');
+      const argumentInput = document.getElementById('argument-input');
+      
+      if (aiToolsModal && argumentTab && argumentInput) {
+        // Set the selected text as the argument
+        argumentInput.value = selectedText;
+        
+        // Show the AI tools modal and activate the argument tab
+        aiToolsModal.style.display = 'flex';
+        document.querySelectorAll('.ai-tool-tab').forEach(tab => tab.classList.remove('active'));
+        argumentTab.classList.add('active');
+        
+        document.querySelectorAll('.ai-tool-content').forEach(content => content.classList.remove('active'));
+        document.getElementById('argument-tab').classList.add('active');
+        
+        // Automatically check the argument
+        document.getElementById('argument-check-btn').click();
+      }
+      
+      // Hide the context menu
+      contextMenu.style.display = 'none';
+    }
+  });
+  
+  document.getElementById('improve-text').addEventListener('click', function() {
+    if (selectedText) {
+      // Open the AI tools modal to the correction tab
+      const aiToolsModal = document.getElementById('ai-tools-modal');
+      const correctionTab = document.querySelector('.ai-tool-tab[data-tab="correction"]');
+      const correctionInput = document.getElementById('correction-input');
+      
+      if (aiToolsModal && correctionTab && correctionInput) {
+        // Set the selected text as the input
+        correctionInput.value = selectedText;
+        
+        // Show the AI tools modal and activate the correction tab
+        aiToolsModal.style.display = 'flex';
+        document.querySelectorAll('.ai-tool-tab').forEach(tab => tab.classList.remove('active'));
+        correctionTab.classList.add('active');
+        
+        document.querySelectorAll('.ai-tool-content').forEach(content => content.classList.remove('active'));
+        document.getElementById('correction-tab').classList.add('active');
+        
+        // Automatically trigger correction
+        document.getElementById('correction-btn').click();
+      }
+      
+      // Hide the context menu
+      contextMenu.style.display = 'none';
+    }
+  });
+  
+  document.getElementById('find-sources').addEventListener('click', function() {
+    if (selectedText) {
+      // Open the AI tools modal to the argument checker tab for finding sources
+      const aiToolsModal = document.getElementById('ai-tools-modal');
+      const argumentTab = document.querySelector('.ai-tool-tab[data-tab="argument"]');
+      const argumentInput = document.getElementById('argument-input');
+      
+      if (aiToolsModal && argumentTab && argumentInput) {
+        // Set the selected text as the query
+        argumentInput.value = selectedText;
+        
+        // Show the AI tools modal and activate the argument tab
+        aiToolsModal.style.display = 'flex';
+        document.querySelectorAll('.ai-tool-tab').forEach(tab => tab.classList.remove('active'));
+        argumentTab.classList.add('active');
+        
+        document.querySelectorAll('.ai-tool-content').forEach(content => content.classList.remove('active'));
+        document.getElementById('argument-tab').classList.add('active');
+        
+        // Automatically find sources
+        document.getElementById('argument-sources-btn').click();
+      }
+      
+      // Hide the context menu
+      contextMenu.style.display = 'none';
+    }
+  });
+});
+
+// Handle file upload - expose this function globally for AI tools
+window.uploadFile = function(file) {
+  if (!file) return;
+  
+  // Create FormData
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  // Show loading indicator
+  const loadingMessage = document.createElement('li');
+  loadingMessage.className = 'message sent';
+  loadingMessage.innerHTML = '<div class="message-bubble">Uploading file...</div>';
+  messages.appendChild(loadingMessage);
+  messages.scrollTop = messages.scrollHeight;
+  
+  // Upload file to server
+  fetch('/upload', {
+    method: 'POST',
+    body: formData
+  })
+  .then(response => {
+    if (!response.ok) {
+      throw new Error('Network response was not ok');
+    }
+    return response.json();
+  })
+  .then(data => {
+    // Remove loading message
+    messages.removeChild(loadingMessage);
+    
+    // Get file name and type
+    const fileName = file.name;
+    const fileType = file.type;
+    const fileSize = file.size;
+    
+    if (currentChatUser) {
+      // Send file message to current chat user
+      socket.emit('file message', {
+        to: currentChatUser,
+        fileUrl: data.url,
+        name: fileName,
+        type: fileType,
+        size: fileSize
+      });
+    } else if (currentChatGroup) {
+      // Send file message to current chat group
+      socket.emit('group file message', {
+        groupId: currentChatGroup.id,
+        fileUrl: data.url,
+        name: fileName, 
+        type: fileType,
+        size: fileSize
+      });
+    }
+  })
+  .catch(error => {
+    console.error('Error uploading file:', error);
+    messages.removeChild(loadingMessage);
+    
+    const errorMessage = document.createElement('li');
+    errorMessage.className = 'message system';
+    errorMessage.innerHTML = '<div class="message-bubble">Error uploading file. Please try again.</div>';
+    messages.appendChild(errorMessage);
+    messages.scrollTop = messages.scrollHeight;
+  });
+};
+
+// Function to insert day labels as needed
+function insertDayLabelIfNeeded(dayLabel) {
+  if (lastDisplayedDay !== dayLabel) {
+    const header = document.createElement('li');
+    header.className = 'day-header';
+    header.textContent = dayLabel;
+    header.style.listStyleType = 'none';
+    messages.appendChild(header);
+    lastDisplayedDay = dayLabel;
+  }
+}
+
+// Set up close button for image modal
+document.addEventListener("DOMContentLoaded", function() {
+  const closeImageBtn = document.getElementById('close-image-preview');
+  if (closeImageBtn) {
+    closeImageBtn.addEventListener('click', function() {
+      const modal = document.getElementById('image-preview-modal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    });
+  }
+});
+
+

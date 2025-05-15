@@ -1,0 +1,34 @@
+{
+  "name": "openchat",
+  "version": "1.0.0",
+  "description": "A secure and feature-rich chat application",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "backblaze-b2": "^1.7.0",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "groq-sdk": "^0.3.0",
+    "jsdom": "^22.1.0",
+    "mongoose": "^7.5.0",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.7.2",
+    "web-push": "^3.6.6"
+  },
+  "devDependencies": {
+    "jest": "^29.6.4",
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

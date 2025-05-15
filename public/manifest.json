@@ -1,0 +1,21 @@
+{
+  "name": "OpenChat",
+  "short_name": "OpenChat",
+  "description": "Secure messaging app",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#128C7E",
+  "theme_color": "#128C7E",
+  "icons": [
+    {
+      "src": "/pngegg.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pngegg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+} 

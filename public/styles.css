@@ -1,0 +1,1565 @@
+/* Global Reset & Layout */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  background-color: #f0f2f5;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Sidebar Styles */
+#sidebar {
+  width: 350px;
+  background-color: white;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+#sidebar-header {
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+#sidebar-header h2 {
+  color: #128C7E;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+#add-database-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background-color: #128C7E;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+#add-database-btn:hover {
+  background-color: #0b6e63;
+  transform: scale(1.05);
+}
+
+#users-list {
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+}
+
+#users-list li {
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+#users-list li:hover {
+  background-color: #f5f5f5;
+}
+
+#users-list li.active {
+  background-color: #e9ebeb;
+}
+
+#users-list li .avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  margin-right: 15px;
+  background-color: #128C7E;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+}
+
+#users-list li .user-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+#users-list li .user-name {
+  font-weight: 600;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#users-list li .last-message {
+  font-size: 13px;
+  color: #777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chat Area */
+#chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #e5ddd5;
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23cec5b7' fill-opacity='0.4' fill-rule='evenodd'%3E%3Cpath d='M0 0h40v40H0V0zm40 40h40v40H40V40zm0-40h2l-2 2V0zm0 4l4-4h2l-6 6V4zm0 4l8-8h2L40 10V8zm0 4L52 0h2L40 14v-2zm0 4L56 0h2L40 18v-2zm0 4L60 0h2L40 22v-2zm0 4L64 0h2L40 26v-2zm0 4L68 0h2L40 30v-2zm0 4L72 0h2L40 34v-2zm0 4L76 0h2L40 38v-2zm0 4L80 0v2L42 40h-2zm4 0L80 4v2L46 40h-2zm4 0L80 8v2L50 40h-2zm4 0l28-28v2L54 40h-2zm4 0l24-24v2L58 40h-2zm4 0l20-20v2L62 40h-2zm4 0l16-16v2L66 40h-2zm4 0l12-12v2L70 40h-2zm4 0l8-8v2l-6 6h-2zm4 0l4-4v2l-2 2h-2z' /%3E%3C/g%3E%3C/svg%3E");
+}
+
+#chat-header {
+  background-color: #128C7E;
+  color: white;
+  padding: 0 15px;
+  font-size: 18px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  height: 60px;
+}
+
+.back-button {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 24px;
+  margin-right: 10px;
+  cursor: pointer;
+  color: white;
+}
+
+.chat-header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 15px;
+}
+
+.chat-header-action {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.chat-header-action:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Messages Container */
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 15px;
+  margin: 0;
+  list-style-type: none;
+}
+
+/* Messages Styling */
+.message-from-me,
+.message-from-others {
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  max-width: 75%;
+  border-radius: 12px;
+  position: relative;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  word-wrap: break-word;
+}
+
+.message-from-me {
+  background-color: #dcf8c6;
+  color: #000;
+  float: right;
+  clear: both;
+  margin-right: 10px;
+  border-top-right-radius: 0;
+}
+
+.message-from-others {
+  background-color: #ffffff;
+  color: #000;
+  float: left;
+  clear: both;
+  margin-left: 10px;
+  border-top-left-radius: 0;
+}
+
+/* Message Text and Time */
+.message-text {
+  display: inline-block;
+  margin-right: 48px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.message-time {
+  font-size: 11px;
+  color: #999;
+  display: inline-block;
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  white-space: nowrap;
+}
+
+/* Day Header */
+.day-header {
+  font-weight: 500;
+  text-align: center;
+  margin: 20px auto;
+  padding: 6px 10px;
+  color: #555;
+  background-color: rgba(225, 245, 254, 0.9);
+  border-radius: 8px;
+  width: fit-content;
+  clear: both;
+  font-size: 13px;
+  box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+}
+
+/* Form and Input */
+#form {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  background-color: #f0f0f0;
+  border-top: 1px solid #d0d0d0;
+}
+
+#input {
+  border-radius: 20px;
+  padding: 12px 15px;
+  margin: 0 8px;
+  border: 1px solid #ddd;
+  flex: 1;
+}
+
+/* Buttons */
+#attachButton,
+#recordButton,
+#send {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  margin: 0 5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+#attachButton:hover,
+#recordButton:hover {
+  background-color: #e0e0e0;
+}
+
+#attachButton {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='none' d='M0 0h24v24H0z'/%3E%3Cpath d='M14 13.5V8a4 4 0 1 0-8 0v5.5a6.5 6.5 0 1 0 13 0V4h2v9.5a8.5 8.5 0 1 1-17 0V8a6 6 0 1 1 12 0v5.5a3.5 3.5 0 0 1-7 0V8h2v5.5a1.5 1.5 0 0 0 3 0z' fill='%23128C7E'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 24px;
+}
+
+#recordButton {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24'%3E%3Cpath fill='none' d='M0 0h24v24H0z'/%3E%3Cpath d='M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6z' fill='%23128C7E'/%3E%3Cpath d='M17 12c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z' fill='%23128C7E'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 24px;
+}
+
+#send {
+  background-color: #128C7E;
+  position: relative;
+}
+
+#send:before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M2.01 21L23 12 2.01 3 2 10l15 2-15 2z'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+#send:hover {
+  background-color: #0b6e63;
+}
+
+/* Login Screen */
+#login-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #128C7E;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+#login-box {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  width: 360px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+#login-box h2 {
+  color: #128C7E;
+  margin-bottom: 25px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.login-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #eee;
+  overflow: hidden;
+}
+
+.login-tab {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  color: #666;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.login-tab.active {
+  color: #128C7E;
+  border-bottom: 2px solid #128C7E;
+  margin-bottom: -2px;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.login-form input:focus {
+  border-color: #128C7E;
+  box-shadow: 0 0 0 2px rgba(18, 140, 126, 0.1);
+}
+
+.login-form button {
+  width: 100%;
+  padding: 14px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-form button:hover {
+  background-color: #0b6e63;
+  transform: translateY(-1px);
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+.login-footer label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* File Messages */
+.file-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.file-message:hover {
+  background: rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+.file-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f0f0;
+  border-radius: 8px;
+  color: #128C7E;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  color: #128C7E;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #666;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.file-action-btn {
+  background: none;
+  border: none;
+  color: #128C7E;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.file-action-btn:hover {
+  background-color: rgba(18, 140, 126, 0.1);
+}
+
+/* File Type Specific Styles */
+.file-message[data-type="image"] {
+  padding: 0;
+  background: none;
+}
+
+.file-message[data-type="image"] img {
+  max-width: 300px;
+  max-height: 300px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.file-message[data-type="image"] img:hover {
+  transform: scale(1.02);
+}
+
+.file-message[data-type="audio"] {
+  background: none;
+  padding: 0;
+}
+
+.file-message[data-type="audio"] audio {
+  width: 100%;
+  max-width: 300px;
+}
+
+.file-message[data-type="video"] {
+  padding: 0;
+  background: none;
+}
+
+.file-message[data-type="video"] video {
+  max-width: 300px;
+  border-radius: 8px;
+}
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 25px;
+  border-radius: 12px;
+  width: 400px;
+  margin: auto;
+  max-width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.modal-content h3 {
+  color: #128C7E;
+  margin-bottom: 15px;
+  font-size: 20px;
+}
+
+.modal-content p {
+  margin-bottom: 15px;
+  color: #666;
+}
+
+.modal-content input {
+  width: 100%;
+  padding: 12px 15px;
+  margin-bottom: 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.modal-content button {
+  width: 100%;
+  padding: 12px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-content button:hover {
+  background-color: #0b6e63;
+}
+
+.close {
+  position: absolute;
+  right: 20px;
+  top: 15px;
+  font-size: 24px;
+  color: #666;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close:hover {
+  color: #128C7E;
+}
+
+/* Image Preview Modal */
+.image-preview-content {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.image-preview-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 8px;
+}
+
+/* Mobile Responsive Improvements */
+@media (max-width: 768px) {
+  /* Better mobile layout */
+  body {
+    overflow: hidden;
+  }
+  
+  /* Ensure sidebar is accessible */
+  #sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 100;
+  }
+  
+  #sidebar.active {
+    transform: translateX(0);
+  }
+  
+  /* Fix chat area width */
+  #chat-area {
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+  }
+  
+  /* Make back button more prominent */
+  .back-button {
+    display: block;
+    font-size: 28px;
+    padding: 10px;
+    margin-right: 10px;
+  }
+  
+  /* Better user list */
+  #users-list {
+    height: calc(100% - 60px);
+    padding-bottom: 20px;
+  }
+  
+  /* More space for user name */
+  #users-list li .user-name {
+    font-size: 16px;
+  }
+  
+  /* Make form stick to bottom */
+  #form {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    background-color: #f0f0f0;
+    padding: 10px;
+    box-shadow: 0 -1px 5px rgba(0,0,0,0.1);
+  }
+  
+  /* Adjust message area to account for fixed form */
+  #messages {
+    height: calc(100vh - 120px);
+    margin-bottom: 60px;
+    padding-bottom: 20px;
+  }
+  
+  /* Better file display on mobile */
+  .file-message[data-type="image"] img {
+    max-width: 85vw;
+    max-height: 30vh;
+  }
+  
+  /* Better audio controls */
+  .file-message[data-type="audio"] audio {
+    width: 85vw;
+    max-width: 300px;
+  }
+  
+  /* Better video player */
+  .file-message[data-type="video"] video {
+    max-width: 85vw;
+    max-height: 30vh;
+  }
+}
+
+/* Small phone screens */
+@media (max-width: 380px) {
+  /* Scale down login box */
+  #login-box {
+    width: 90%;
+    padding: 20px 15px;
+  }
+  
+  /* Smaller buttons */
+  #form button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  
+  /* Ensure text doesn't overflow */
+  .message-from-me, .message-from-others {
+    max-width: 80%;
+    font-size: 14px;
+  }
+}
+
+/* Add loading indicator style */
+.loading-indicator {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  z-index: 1000;
+  font-size: 16px;
+}
+
+/* Unseen Message Count */
+.unseen-count {
+  background-color: #128C7E;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+/* Additional UI Improvements */
+
+/* Better chat bubbles */
+.message-from-me,
+.message-from-others {
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  max-width: 75%;
+  border-radius: 12px;
+  position: relative;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  word-wrap: break-word;
+}
+
+.message-from-me {
+  background-color: #dcf8c6;
+  color: #000;
+  float: right;
+  clear: both;
+  margin-right: 10px;
+  border-top-right-radius: 0;
+}
+
+.message-from-others {
+  background-color: #ffffff;
+  color: #000;
+  float: left;
+  clear: both;
+  margin-left: 10px;
+  border-top-left-radius: 0;
+}
+
+/* Make buttons more visible with icons */
+#send {
+  background-color: #128C7E;
+  position: relative;
+}
+
+#send:before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M2.01 21L23 12 2.01 3 2 10l15 2-15 2z'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* Better styling for form controls */
+#form {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  background-color: #f0f0f0;
+  border-top: 1px solid #d0d0d0;
+}
+
+#input {
+  border-radius: 20px;
+  padding: 12px 15px;
+  margin: 0 8px;
+  border: 1px solid #ddd;
+  flex: 1;
+}
+
+/* Make chat header clearer */
+#chat-header {
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  height: 60px;
+}
+
+#current-chat-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+
+/* Make sure file inputs work properly */
+#fileInput {
+  position: absolute;
+  visibility: hidden;
+}
+
+/* Improve styling for mobile file messages */
+@media (max-width: 768px) {
+  .file-message[data-type="image"] img,
+  .file-message[data-type="video"] video {
+    max-width: 260px;
+  }
+  
+  .file-message[data-type="audio"] audio {
+    width: 240px;
+  }
+}
+
+/* Fix file message display */
+.message-from-me .file-message,
+.message-from-others .file-message {
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.file-message {
+  margin-bottom: 15px;
+  max-width: 100%;
+}
+
+/* iOS-specific fixes */
+.ios-device .login-tab,
+.ios-device button {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ios-device button,
+.ios-device .login-tab {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+}
+
+.ios-device input[type="checkbox"] {
+  -webkit-appearance: checkbox;
+  -moz-appearance: checkbox;
+  appearance: checkbox;
+}
+
+.ios-device input[type="text"],
+.ios-device input[type="password"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  font-size: 16px !important; /* Prevent zoom on iOS */
+}
+
+/* Safari-specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* CSS specific to iOS devices */
+  .login-form button {
+    position: relative;
+    z-index: 10;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+  
+  #login-button, #signup-button {
+    padding: 16px;
+    min-height: 50px;
+    margin-top: 10px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+  }
+  
+  .touch-active {
+    opacity: 0.7;
+  }
+
+  /* Ensure login screen is correctly positioned */
+  #login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+  }
+}
+
+/* iPad-specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* CSS specific to iOS devices */
+  body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  
+  /* Fix tap highlight */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Fix scrolling on iPad */
+  #messages, #users-list {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+  }
+  
+  /* Fix login tabs on iPad */
+  .login-tab {
+    padding: 16px 12px; /* Larger touch targets */
+  }
+  
+  /* Fix input fields on iPad */
+  input, button {
+    -webkit-appearance: none;
+    border-radius: 8px;
+  }
+  
+  /* Fix checkbox */
+  input[type="checkbox"] {
+    -webkit-appearance: checkbox;
+    width: 20px;
+    height: 20px;
+  }
+  
+  /* Ensure buttons are tappable */
+  #send, #attachButton, #recordButton, .back-button {
+    padding: 15px;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Fix sticky headers */
+  #chat-header, #sidebar-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  
+  /* Fix input form */
+  #form {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    padding: 12px 10px;
+  }
+  
+  /* Fix status bar spacing */
+  #login-screen, #chat-area, #sidebar {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Fix modal positions */
+  .modal-content {
+    padding-top: env(safe-area-inset-top);
+    margin-top: 20px;
+  }
+}
+
+/* iPad Pro and iPad specific media queries */
+@media only screen and (min-device-width: 768px) and (max-device-width: 1366px) {
+  /* Specific iPad styling */
+  #sidebar {
+    width: 320px;
+  }
+  
+  /* Better layout for split view */
+  body {
+    display: flex;
+  }
+  
+  /* Make sure messages are visible */
+  #messages {
+    height: calc(100vh - 120px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  
+  /* Better scaling for iPad */
+  .message-from-me, .message-from-others {
+    max-width: 70%;
+  }
+}
+
+/* Group chat related styles */
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+#create-group-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background-color: #128C7E;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Group modal */
+.group-members {
+  margin: 15px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.group-members h4 {
+  margin-bottom: 10px;
+  color: #444;
+}
+
+.select-members {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  background-color: #f5f5f5;
+}
+
+.member-item label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.member-item input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.input-group {
+  margin-bottom: 15px;
+}
+
+.input-group label {
+  display: block;
+  margin-bottom: 5px;
+  color: #555;
+}
+
+/* Group chat in users list */
+.group-chat-item .avatar {
+  background-color: #075E54;
+}
+
+.group-avatar {
+  position: relative;
+}
+
+.group-avatar:before {
+  content: '👥';
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background-color: #128C7E;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid white;
+}
+
+/* CSS for user items in sidebar that are groups */
+.user-item.group {
+  background-color: #f2f8f7;
+}
+
+/* Improve user item interaction for touch devices */
+.user-item {
+  cursor: pointer;
+  -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+  min-height: 60px;
+  position: relative;
+  z-index: 1;
+  touch-action: manipulation;
+}
+
+.user-item:active {
+  background-color: rgba(0,0,0,0.05);
+}
+
+/* Fix scrolling on iPad */
+.ios-device #messages, 
+.ios-device #users-list {
+  -webkit-overflow-scrolling: touch; /* Enable momentum scrolling */
+  overflow-y: auto;
+  overscroll-behavior: contain; /* Prevent pull-to-refresh */
+}
+
+/* Fix input form */
+.ios-device #form {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  padding: 12px 10px;
+}
+
+/* Additional iPad-specific improvements */
+@media only screen and (min-device-width: 768px) and (max-device-width: 1366px) and (-webkit-min-device-pixel-ratio: 2) {
+  /* iPad Pro specific enhancements */
+  input,
+  button,
+  .login-tab,
+  a {
+    cursor: pointer;
+    -webkit-appearance: none;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    touch-action: manipulation;
+  }
+  
+  /* Larger touch targets */
+  button,
+  .login-tab,
+  input[type="checkbox"],
+  input[type="radio"],
+  a.file-download {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better scrolling */
+  #messages,
+  #users-list {
+    -webkit-overflow-scrolling: touch; 
+    overscroll-behavior: contain;
+  }
+  
+  /* Fix login screen */
+  #login-box {
+    width: 90%;
+    max-width: 400px;
+    padding: 30px;
+  }
+  
+  /* Better login tabs */
+  .login-tab {
+    padding: 16px 12px;
+    font-size: 18px;
+  }
+  
+  /* Improved form fields */
+  .login-form input {
+    padding: 16px;
+    font-size: 16px;
+  }
+  
+  .login-form button {
+    padding: 16px;
+    font-size: 18px;
+  }
+  
+  /* Group selection improvements */
+  .member-item {
+    padding: 8px;
+  }
+  
+  .member-item label {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+  }
+  
+  .member-item input[type="checkbox"] {
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+  }
+  
+  /* More visible back button */
+  .back-button {
+    font-size: 28px;
+    padding: 10px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Fix sender name in group chats */
+  .message-sender {
+    color: #0b6e63;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+}
+
+/* Audio Player Styles */
+.audio-waveform {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  gap: 1px;
+  flex-grow: 1;
+  margin: 0 8px;
+  overflow: hidden;
+  flex-shrink: 1;
+  min-width: 0; /* Allow container to shrink below content size */
+}
+
+.waveform-bar {
+  flex: 1;
+  min-width: 2px;
+  max-width: 3px;
+  background-color: #25D366;
+  border-radius: 2px;
+}
+
+.message-from-me .waveform-bar {
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.audio-info {
+  font-size: 12px;
+  color: #555;
+  margin-right: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.transcript-button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  color: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  margin-left: 5px;
+  min-height: 30px; /* For better touch targets on iOS */
+  flex-shrink: 0;
+}
+
+.transcript-button:active {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.audio-message-container audio {
+  display: none; /* Hide the native audio player */
+}
+
+/* Make the audio player fit the message bubble properly */
+.message-bubble .audio-message-container {
+  margin: 5px 0;
+}
+
+/* Styling for image messages */
+.image-message-container {
+  position: relative;
+  margin: 5px 0;
+  max-width: 300px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.message-image {
+  width: 100%;
+  max-width: 300px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: block;
+}
+
+/* Styling for video messages */
+.video-message-container {
+  position: relative;
+  margin: 5px 0;
+  max-width: 300px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.message-video {
+  width: 100%;
+  max-width: 300px;
+  border-radius: 8px;
+  display: block;
+}
+
+/* Transcript result styling */
+.transcript-result {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #333;
+  line-height: 1.4;
+}
+
+/* Loading indicator for transcription */
+.transcript-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #666;
+}
+
+.transcript-loading::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  border-top: 2px solid #128C7E;
+  border-radius: 50%;
+  margin-right: 5px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* File attachment styling */
+.file-attachment {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 5px 0;
+}
+
+.file-icon {
+  font-size: 24px;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 12px;
+  color: #555;
+}
+
+.download-link {
+  font-size: 12px;
+  color: #128C7E;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(18, 140, 126, 0.1);
+  flex-shrink: 0;
+}
+
+.download-link:hover {
+  background-color: rgba(18, 140, 126, 0.2);
+}
+
+/* Fix for iOS devices */
+@media (pointer: coarse) {
+  .audio-play-button,
+  .transcript-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Audio Message Styling */
+.audio-message-container {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  width: 240px;
+  position: relative;
+}
+
+.audio-play-button {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #128C7E;
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-right: 10px;
+  min-height: 36px; /* For better touch targets on iOS */
+  flex-shrink: 0;
+}
+
+.audio-play-button:active {
+  background-color: #0e7264;
+}
+
+.play-icon {
+  font-size: 14px;
+  margin-left: 2px; /* Slight adjustment for the play icon */
+}
+
+/* Safari browser specific fixes */
+.safari-browser .login-form button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border-radius: 8px;
+  border: none;
+  position: relative;
+  z-index: 100;
+  height: auto;
+  touch-action: manipulation;
+  cursor: pointer !important;
+}
+
+.safari-browser #login-button,
+.safari-browser #signup-button {
+  min-height: 50px;
+  user-select: none;
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 100;
+}
+
+@media not all and (min-resolution:.001dpcm) { 
+  @supports (-webkit-appearance:none) {
+    /* Safari-only CSS */
+    #login-button, #signup-button { 
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+      cursor: pointer !important;
+      touch-action: manipulation;
+      height: 50px;
+    }
+  }
+}
+
+/* Additional Safari on iPad fixes */
+.safari-browser #sidebar,
+.safari-browser #chat-area {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.safari-browser.chat-active #chat-area {
+  flex: 1 !important;
+  position: relative !important;
+  z-index: 100 !important;
+}
+
+.safari-browser.chat-active #sidebar {
+  display: flex !important;
+}
+
+@media (max-width: 768px) {
+  .safari-browser.chat-active #sidebar:not(.active) {
+    transform: translateX(-100%) !important;
+  }
+  
+  .safari-browser.chat-active #sidebar.active {
+    transform: translateX(0) !important;
+  }
+  
+  .safari-browser.chat-active .back-button {
+    display: block !important;
+  }
+}
+
+/* Specific iPad and iPad Pro Safari fix */
+@media only screen and (min-device-width: 768px) and (max-device-width: 1366px) and (orientation: portrait) and (-webkit-min-device-pixel-ratio: 2) {
+  .safari-browser #login-screen {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 9999 !important;
+  }
+  
+  .safari-browser #login-screen[style*="display: none"] + #sidebar,
+  .safari-browser #login-screen[style*="display: none"] + #chat-area {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+}

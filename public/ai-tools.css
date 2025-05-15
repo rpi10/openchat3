@@ -1,0 +1,467 @@
+/* AI Tools Modal and UI */
+.ai-tools-button {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #128C7E;
+  color: white;
+  font-size: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 900;
+  transition: transform 0.3s, background-color 0.3s;
+}
+
+.ai-tools-button:hover {
+  transform: scale(1.08);
+  background-color: #0b6e63;
+}
+
+.ai-tools-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-tools-container {
+  background-color: white;
+  width: 90%;
+  max-width: 800px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.ai-tools-header {
+  background-color: #128C7E;
+  color: white;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ai-tools-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.ai-tools-close {
+  font-size: 24px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: white;
+}
+
+.ai-tools-tabs {
+  display: flex;
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.ai-tool-tab {
+  flex: 1;
+  padding: 12px;
+  text-align: center;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.ai-tool-tab.active {
+  background-color: white;
+  border-bottom: 3px solid #128C7E;
+}
+
+.ai-tool-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: none;
+}
+
+.ai-tool-content.active {
+  display: block;
+}
+
+/* Chat Assistant */
+.ai-chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+}
+
+.ai-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.ai-chat-input-container {
+  display: flex;
+  gap: 10px;
+}
+
+.ai-chat-input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 20px;
+  border: 1px solid #ddd;
+}
+
+.ai-chat-send {
+  padding: 8px 16px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.ai-message {
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  max-width: 75%;
+  border-radius: 12px;
+  position: relative;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.ai-message-user {
+  background-color: #dcf8c6;
+  align-self: flex-end;
+  margin-left: auto;
+  border-top-right-radius: 0;
+}
+
+.ai-message-bot {
+  background-color: #ffffff;
+  align-self: flex-start;
+  margin-right: auto;
+  border-top-left-radius: 0;
+}
+
+/* Argument Checker */
+.argument-checker-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.argument-input {
+  width: 100%;
+  height: 120px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  resize: none;
+}
+
+.argument-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.argument-check-btn, .argument-sources-btn {
+  padding: 10px 16px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.argument-result {
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 10px;
+  display: none;
+}
+
+.argument-sources {
+  margin-top: 15px;
+  border-top: 1px solid #ddd;
+  padding-top: 15px;
+}
+
+.source-item {
+  margin-bottom: 10px;
+}
+
+.source-item a {
+  color: #128C7E;
+  text-decoration: none;
+}
+
+.source-item a:hover {
+  text-decoration: underline;
+}
+
+/* Text Correction Tool */
+.correction-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.correction-input {
+  width: 100%;
+  height: 120px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  resize: none;
+}
+
+.correction-btn {
+  padding: 10px 16px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.correction-result {
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  margin-top: 10px;
+  background-color: #f9f9f9;
+  display: none;
+}
+
+/* Loading indicator */
+.ai-loading {
+  text-align: center;
+  padding: 20px;
+}
+
+.ai-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(18, 140, 126, 0.2);
+  border-radius: 50%;
+  border-top-color: #128C7E;
+  animation: spin 1s ease-in-out infinite;
+  margin: 0 auto 10px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+  .ai-tools-container {
+    width: 95%;
+    max-height: 80vh;
+  }
+  
+  .ai-tools-button {
+    bottom: 70px;
+    right: 15px;
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+  }
+  
+  .ai-tool-tab {
+    padding: 10px 5px;
+    font-size: 14px;
+  }
+  
+  .argument-buttons, .ai-chat-input-container {
+    flex-direction: column;
+  }
+  
+  .ai-chat-container {
+    height: 350px;
+  }
+}
+
+/* Rating colors for argument checker */
+.rating-1 { background-color: #FF0000; color: white; }
+.rating-2 { background-color: #FF6666; color: white; }
+.rating-3 { background-color: #FFFF00; }
+.rating-4 { background-color: #CCFFCC; }
+.rating-5 { background-color: #008000; color: white; }
+
+/* Image Generator Tool */
+.image-generator-container {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.image-prompt-input {
+  width: 100%;
+  height: 100px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  resize: none;
+}
+
+.image-generator-options {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.image-style-select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  background-color: white;
+  flex: 1;
+}
+
+.generate-image-btn {
+  padding: 10px 16px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.image-result {
+  margin-top: 15px;
+  min-height: 100px;
+}
+
+.image-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #128C7E #f0f0f0;
+}
+
+.image-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.image-container::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.image-container::-webkit-scrollbar-thumb {
+  background-color: #128C7E;
+  border-radius: 4px;
+}
+
+.generated-image {
+  width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: transform 0.3s ease;
+}
+
+.generated-image:hover {
+  transform: scale(1.02);
+}
+
+.image-action-buttons {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 5px 0;
+  position: sticky;
+  bottom: 0;
+  background-color: white;
+  z-index: 10;
+  width: 100%;
+  justify-content: center;
+}
+
+.image-action-btn {
+  padding: 12px 18px;
+  background-color: #128C7E;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 500;
+  min-width: 120px;
+  text-align: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.image-loading {
+  text-align: center;
+  padding: 20px;
+}
+
+/* Don't forget to add touch support for all buttons */
+@media (max-width: 768px) {
+  .generate-image-btn,
+  .image-action-btn {
+    min-height: 44px; /* Make touch targets larger */
+  }
+  
+  .image-generator-options {
+    flex-direction: column;
+  }
+  
+  .image-style-select {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+.image-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-height: 350px;
+  overflow-y: auto;
+  width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #128C7E #f0f0f0;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.image-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.image-wrapper::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.image-wrapper::-webkit-scrollbar-thumb {
+  background-color: #128C7E;
+  border-radius: 4px;
+} 
